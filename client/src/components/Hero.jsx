@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+
 function Hero() {
   return (
     <div className="hero bg-base-200 min-h-[70vh]">
@@ -14,9 +16,13 @@ function Hero() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="btn btn-primary">Get Started</button>
+            <Link to="/register" className="btn btn-primary">
+              Get Started
+            </Link>
 
-            <button className="btn btn-outline">Learn More</button>
+            <a href="#features" className="btn btn-outline">
+              Learn More
+            </a>
           </div>
         </div>
       </div>

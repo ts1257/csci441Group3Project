@@ -1,6 +1,6 @@
 function Features() {
   return (
-    <div className="py-16">
+    <div id="features" className="py-16">
       <h2 className="text-3xl sm:text-4xl font-bold text-center mb-12">
         Features
       </h2>
