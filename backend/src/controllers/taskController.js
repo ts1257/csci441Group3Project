@@ -1,0 +1,148 @@
+import Task from "../models/Task.js";
+import Persona from "../models/Persona.js";
+
+export async function createTask(req, res, next) {
+  try {
+    const { title, description, dueDate, priority, status, persona } = req.body;
+
+    if (!title || !persona) {
+      return res.status(400).json({
+        message: "Task title and persona are required",
+      });
+    }
+
+    const existingPersona = await Persona.findOne({
+      _id: persona,
+      user: req.user.userId,
+    });
+
+    if (!existingPersona) {
+      return res.status(404).json({
+        message: "Associated persona not found",
+      });
+    }
+
+    const task = await Task.create({
+      user: req.user.userId,
+      persona,
+      title: title.trim(),
+      description: description?.trim() || "",
+      dueDate: dueDate || null,
+      priority: priority || "medium",
+      status: status || "todo",
+      completed: status === "done",
+    });
+
+    const populatedTask = await task.populate("persona", "name color");
+
+    res.status(201).json({
+      message: "Task created successfully",
+      task: populatedTask,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getTasks(req, res, next) {
+  try {
+    const { persona, status, priority } = req.query;
+
+    const filter = {
+      user: req.user.userId,
+    };
+
+    if (persona) filter.persona = persona;
+    if (status) filter.status = status;
+    if (priority) filter.priority = priority;
+
+    const tasks = await Task.find(filter)
+      .populate("persona", "name color")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      tasks,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateTask(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { title, description, dueDate, priority, status, completed, persona } = req.body;
+
+    const task = await Task.findOne({
+      _id: id,
+      user: req.user.userId,
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+
+    if (persona !== undefined) {
+      const existingPersona = await Persona.findOne({
+        _id: persona,
+        user: req.user.userId,
+      });
+
+      if (!existingPersona) {
+        return res.status(404).json({
+          message: "Associated persona not found",
+        });
+      }
+
+      task.persona = persona;
+    }
+
+    if (title !== undefined) task.title = title.trim();
+    if (description !== undefined) task.description = description.trim();
+    if (dueDate !== undefined) task.dueDate = dueDate || null;
+    if (priority !== undefined) task.priority = priority;
+    if (status !== undefined) task.status = status;
+    if (completed !== undefined) task.completed = completed;
+
+    if (status === "done") {
+      task.completed = true;
+    }
+
+    const updatedTask = await task.save();
+    await updatedTask.populate("persona", "name color");
+
+    res.status(200).json({
+      message: "Task updated successfully",
+      task: updatedTask,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteTask(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const task = await Task.findOne({
+      _id: id,
+      user: req.user.userId,
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+
+    await task.deleteOne();
+
+    res.status(200).json({
+      message: "Task deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
