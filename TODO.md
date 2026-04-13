@@ -1,3 +1,0 @@
-- [x] Update `client/src/utils/auth.js` to support `VITE_API_URL` with fallback.
-- [x] Rebuild frontend to verify production build still succeeds.
-- [x] Provide exact Vercel deployment configuration and env var setup steps.
