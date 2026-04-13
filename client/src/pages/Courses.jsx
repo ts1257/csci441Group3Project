@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import Sidebar from "../components/dashboard/Sidebar";
-import TaskManager from "../components/dashboard/TaskManager";
 
-function Dashboard() {
+function Courses() {
+  const navigate = useNavigate();
+
   const [online, setOnline] = useState(navigator.onLine);
   const [personas, setPersonas] = useState([]);
   const [selectedPersona, setSelectedPersona] = useState("");
@@ -107,6 +109,16 @@ function Dashboard() {
     fetchPersonas();
   }, []);
 
+  useEffect(() => {
+    if (!selectedPersonaName) return;
+
+    const isStudent = selectedPersonaName.toLowerCase().trim() === "student";
+
+    if (!isStudent) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [selectedPersonaName, navigate]);
+
   const handlePersonaChange = (e) => {
     const personaId = e.target.value;
     const foundPersona = personas.find((persona) => persona._id === personaId);
@@ -120,6 +132,8 @@ function Dashboard() {
       foundPersona ? foundPersona.name : "",
     );
   };
+
+  const isStudent = selectedPersonaName?.toLowerCase().trim() === "student";
 
   return (
     <div className="min-h-[calc(100vh-73px)] bg-base-200">
@@ -163,9 +177,9 @@ function Dashboard() {
         <main className="min-w-0 flex-1">
           <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-base-300 bg-base-100 p-5 shadow-sm md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold md:text-4xl">Dashboard</h1>
+              <h1 className="text-3xl font-bold md:text-4xl">Courses</h1>
               <p className="mt-1 text-sm opacity-70 md:text-base">
-                Manage your tasks, switch personas, and track your progress.
+                Manage course-related information for Student mode.
               </p>
             </div>
 
@@ -199,11 +213,90 @@ function Dashboard() {
             </div>
           </div>
 
-          <TaskManager selectedPersona={selectedPersona} />
+          {!isStudent ? (
+            <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+              <h2 className="text-2xl font-bold">Courses unavailable</h2>
+              <p className="mt-2 opacity-70">
+                Courses is only available in Student mode.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mb-6 grid gap-4 md:grid-cols-3">
+                <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+                  <p className="text-sm font-medium uppercase tracking-wide opacity-60">
+                    Total Courses
+                  </p>
+                  <h3 className="mt-3 text-4xl font-bold">3</h3>
+                </div>
+
+                <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+                  <p className="text-sm font-medium uppercase tracking-wide opacity-60">
+                    Active Assignments
+                  </p>
+                  <h3 className="mt-3 text-4xl font-bold">5</h3>
+                </div>
+
+                <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+                  <p className="text-sm font-medium uppercase tracking-wide opacity-60">
+                    Due This Week
+                  </p>
+                  <h3 className="mt-3 text-4xl font-bold">2</h3>
+                </div>
+              </div>
+
+              <section className="rounded-[2rem] border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+                <div className="mb-5 flex items-center justify-between">
+                  <h2 className="text-2xl font-bold md:text-3xl">My Courses</h2>
+                  <button className="btn btn-primary rounded-2xl">
+                    Add Course
+                  </button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="rounded-3xl border border-base-300 p-5">
+                    <h3 className="text-xl font-semibold">
+                      Software Engineering
+                    </h3>
+                    <p className="mt-2 text-sm opacity-70">
+                      Group project, reports, and implementation tasks.
+                    </p>
+                    <p className="mt-3 text-sm opacity-60">
+                      Instructor: Professor Ghunaim
+                    </p>
+                  </div>
+
+                  <div className="rounded-3xl border border-base-300 p-5">
+                    <h3 className="text-xl font-semibold">
+                      Foundations of Computing
+                    </h3>
+                    <p className="mt-2 text-sm opacity-70">
+                      Concepts, quizzes, and chapter review materials.
+                    </p>
+                    <p className="mt-3 text-sm opacity-60">
+                      Weekly study planning
+                    </p>
+                  </div>
+
+                  <div className="rounded-3xl border border-base-300 p-5">
+                    <h3 className="text-xl font-semibold">
+                      Back-End Web Development
+                    </h3>
+                    <p className="mt-2 text-sm opacity-70">
+                      API development, Node.js practice, and deployment work.
+                    </p>
+                    <p className="mt-3 text-sm opacity-60">
+                      Ongoing course activities
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
         </main>
       </div>
     </div>
   );
 }
 
-export default Dashboard;
+export default Courses;

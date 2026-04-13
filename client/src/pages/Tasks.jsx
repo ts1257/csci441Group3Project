@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "../components/dashboard/Sidebar";
 import TaskManager from "../components/dashboard/TaskManager";
 
-function Dashboard() {
+function Tasks() {
   const [online, setOnline] = useState(navigator.onLine);
   const [personas, setPersonas] = useState([]);
   const [selectedPersona, setSelectedPersona] = useState("");
@@ -163,9 +163,9 @@ function Dashboard() {
         <main className="min-w-0 flex-1">
           <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-base-300 bg-base-100 p-5 shadow-sm md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold md:text-4xl">Dashboard</h1>
+              <h1 className="text-3xl font-bold md:text-4xl">Tasks</h1>
               <p className="mt-1 text-sm opacity-70 md:text-base">
-                Manage your tasks, switch personas, and track your progress.
+                View and manage tasks for the active persona.
               </p>
             </div>
 
@@ -206,4 +206,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard;
+export default Tasks;

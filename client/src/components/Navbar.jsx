@@ -7,8 +7,7 @@ function Navbar() {
   const token = localStorage.getItem("token");
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
-  const isDashboardPage = location.pathname === "/dashboard";
-
+  const isDashboardPage = location.pathname.startsWith("/dashboard");
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
