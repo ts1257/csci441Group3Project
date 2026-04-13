@@ -1,7 +1,16 @@
-import { Link } from "react-router";
+import { Link, NavLink, useNavigate } from "react-router";
 import logo from "../assets/logo.png";
 
 function Navbar() {
+  const navigate = useNavigate();
+  const token = localStorage.getItem("token");
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
+
   return (
     <div className="navbar bg-base-100 shadow-sm">
       <div className="max-w-7xl mx-auto w-full px-4 flex items-center justify-between">
@@ -20,8 +29,14 @@ function Navbar() {
         <div className="navbar-center hidden lg:flex">
           <ul className="menu menu-horizontal px-1">
             <li>
-              <Link to="/">Home</Link>
+              <NavLink to="/">Home</NavLink>
             </li>
+
+            {token && (
+              <li>
+                <NavLink to="/dashboard">Dashboard</NavLink>
+              </li>
+            )}
           </ul>
         </div>
 
@@ -29,12 +44,23 @@ function Navbar() {
         <div className="navbar-end gap-2">
           {/* Desktop Buttons */}
           <div className="hidden lg:flex gap-2">
-            <Link to="/login" className="btn btn-outline">
-              Login
-            </Link>
-            <Link to="/register" className="btn btn-primary">
-              Register
-            </Link>
+            {token ? (
+              <button
+                onClick={handleLogout}
+                className="btn btn-error text-white"
+              >
+                Logout
+              </button>
+            ) : (
+              <>
+                <Link to="/login" className="btn btn-outline">
+                  Login
+                </Link>
+                <Link to="/register" className="btn btn-primary">
+                  Register
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile Hamburger */}
@@ -61,14 +87,28 @@ function Navbar() {
               className="menu menu-sm dropdown-content bg-base-100 rounded-box mt-3 w-52 p-2 shadow"
             >
               <li>
-                <Link to="/">Home</Link>
+                <NavLink to="/">Home</NavLink>
               </li>
-              <li>
-                <Link to="/login">Login</Link>
-              </li>
-              <li>
-                <Link to="/register">Register</Link>
-              </li>
+
+              {token ? (
+                <>
+                  <li>
+                    <NavLink to="/dashboard">Dashboard</NavLink>
+                  </li>
+                  <li>
+                    <button onClick={handleLogout}>Logout</button>
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li>
+                    <NavLink to="/login">Login</NavLink>
+                  </li>
+                  <li>
+                    <NavLink to="/register">Register</NavLink>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
         </div>
