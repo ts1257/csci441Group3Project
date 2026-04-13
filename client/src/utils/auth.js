@@ -1,5 +1,8 @@
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const buildApiUrl = (path) => (API_BASE_URL ? `${API_BASE_URL}${path}` : path);
+
 export async function registerRequest({ name, email, password }) {
-  const response = await fetch("/api/auth/register", {
+  const response = await fetch(buildApiUrl("/api/auth/register"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -17,7 +20,7 @@ export async function registerRequest({ name, email, password }) {
 }
 
 export async function loginRequest({ email, password }) {
-  const response = await fetch("/api/auth/login", {
+  const response = await fetch(buildApiUrl("/api/auth/login"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
