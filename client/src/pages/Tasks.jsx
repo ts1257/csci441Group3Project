@@ -1,49 +1,73 @@
-import { useEffect, useState } from "react";
-import Sidebar from "../components/dashboard/Sidebar";
+import { useEffect, useMemo, useState } from "react";
+import DashboardLayout from "../components/dashboard/DashboardLayout";
 import TaskManager from "../components/dashboard/TaskManager";
+import FinanceSection from "../components/dashboard/FinanceSection";
 
 function Tasks() {
-  const [online, setOnline] = useState(navigator.onLine);
-  const [personas, setPersonas] = useState([]);
-  const [selectedPersona, setSelectedPersona] = useState("");
-  const [selectedPersonaName, setSelectedPersonaName] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [taskStats, setTaskStats] = useState({
+    total: 0,
+    active: 0,
+    completed: 0,
+  });
+
+  return (
+    <DashboardLayout
+      title="Tasks"
+      subtitle="View and manage tasks for the active persona."
+      financeTitle="Finance"
+      financeSubtitle="Manage finance records and planned payments for Finance mode."
+    >
+      {({
+        selectedPersona,
+        selectedPersonaName,
+        isFinance,
+        displayPersonaName,
+      }) =>
+        isFinance ? (
+          <FinanceSection />
+        ) : (
+          <TasksContent
+            selectedPersona={selectedPersona}
+            selectedPersonaName={selectedPersonaName}
+            displayPersonaName={displayPersonaName}
+            taskStats={taskStats}
+            setTaskStats={setTaskStats}
+          />
+        )
+      }
+    </DashboardLayout>
+  );
+}
+
+function TasksContent({
+  selectedPersona,
+  selectedPersonaName,
+  displayPersonaName,
+  taskStats,
+  setTaskStats,
+}) {
+  const [tasks, setTasks] = useState([]);
+  const [loadingStats, setLoadingStats] = useState(false);
 
   useEffect(() => {
-    const goOnline = () => setOnline(true);
-    const goOffline = () => setOnline(false);
+    const fetchTasksForStats = async () => {
+      if (!selectedPersona) {
+        setTasks([]);
+        setTaskStats({
+          total: 0,
+          active: 0,
+          completed: 0,
+        });
+        return;
+      }
 
-    window.addEventListener("online", goOnline);
-    window.addEventListener("offline", goOffline);
-
-    return () => {
-      window.removeEventListener("online", goOnline);
-      window.removeEventListener("offline", goOffline);
-    };
-  }, []);
-
-  useEffect(() => {
-    const openSidebar = () => setSidebarOpen(true);
-
-    window.addEventListener("open-dashboard-sidebar", openSidebar);
-
-    return () => {
-      window.removeEventListener("open-dashboard-sidebar", openSidebar);
-    };
-  }, []);
-
-  useEffect(() => {
-    const fetchPersonas = async () => {
       try {
-        setLoading(true);
-        setError("");
+        setLoadingStats(true);
 
         const token = localStorage.getItem("token");
 
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/personas`,
+          `${import.meta.env.VITE_API_URL}/api/tasks`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -54,155 +78,89 @@ function Tasks() {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.message || "Failed to fetch personas");
+          throw new Error(data.message || "Failed to fetch tasks");
         }
 
-        const personaList = Array.isArray(data)
+        const taskList = Array.isArray(data)
           ? data
-          : Array.isArray(data.personas)
-            ? data.personas
+          : Array.isArray(data.tasks)
+            ? data.tasks
             : Array.isArray(data.data)
               ? data.data
               : [];
 
-        setPersonas(personaList);
+        const filteredTasks = taskList.filter((task) => {
+          const taskPersonaId =
+            typeof task.persona === "object" ? task.persona?._id : task.persona;
 
-        const savedPersonaId = localStorage.getItem("activePersonaId");
-        const savedPersonaName = localStorage.getItem("activePersonaName");
+          return taskPersonaId === selectedPersona;
+        });
 
-        let initialPersona = null;
-
-        if (savedPersonaId) {
-          initialPersona = personaList.find(
-            (persona) => persona._id === savedPersonaId,
-          );
-        }
-
-        if (!initialPersona && savedPersonaName) {
-          initialPersona = personaList.find(
-            (persona) =>
-              persona.name?.toLowerCase().trim() ===
-              savedPersonaName.toLowerCase().trim(),
-          );
-        }
-
-        if (!initialPersona && personaList.length > 0) {
-          initialPersona = personaList[0];
-        }
-
-        if (initialPersona) {
-          setSelectedPersona(initialPersona._id);
-          setSelectedPersonaName(initialPersona.name);
-          localStorage.setItem("activePersonaId", initialPersona._id);
-          localStorage.setItem("activePersonaName", initialPersona.name);
-        }
-      } catch (err) {
-        setError(err.message || "Something went wrong");
-        setPersonas([]);
+        setTasks(filteredTasks);
+      } catch {
+        setTasks([]);
+        setTaskStats({
+          total: 0,
+          active: 0,
+          completed: 0,
+        });
       } finally {
-        setLoading(false);
+        setLoadingStats(false);
       }
     };
 
-    fetchPersonas();
-  }, []);
+    fetchTasksForStats();
+  }, [selectedPersona, setTaskStats]);
 
-  const handlePersonaChange = (e) => {
-    const personaId = e.target.value;
-    const foundPersona = personas.find((persona) => persona._id === personaId);
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const completed = tasks.filter(
+      (task) => task.status === "done" || task.completed === true,
+    ).length;
+    const active = total - completed;
 
-    setSelectedPersona(personaId);
-    setSelectedPersonaName(foundPersona ? foundPersona.name : "");
+    return {
+      total,
+      active,
+      completed,
+    };
+  }, [tasks]);
 
-    localStorage.setItem("activePersonaId", personaId);
-    localStorage.setItem(
-      "activePersonaName",
-      foundPersona ? foundPersona.name : "",
-    );
-  };
+  useEffect(() => {
+    setTaskStats(stats);
+  }, [stats, setTaskStats]);
 
   return (
-    <div className="min-h-[calc(100vh-73px)] bg-base-200">
-      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
-        <aside className="hidden w-72 shrink-0 lg:block">
-          <div className="sticky top-28 space-y-4">
-            <Sidebar
-              selectedPersonaName={selectedPersonaName}
-              onNavigate={() => setSidebarOpen(false)}
-            />
-          </div>
-        </aside>
+    <>
+      <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+          <p className="text-sm opacity-60">Total Tasks</p>
+          <h3 className="mt-3 text-4xl font-bold">
+            {loadingStats ? "..." : taskStats.total}
+          </h3>
+        </div>
 
-        {sidebarOpen && (
-          <>
-            <div
-              className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <aside className="fixed right-0 top-0 z-50 h-full w-72 overflow-y-auto bg-base-200 p-4 lg:hidden">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold">Menu</h2>
-                <button
-                  className="btn btn-ghost btn-sm rounded-xl"
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  ✕
-                </button>
-              </div>
+        <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+          <p className="text-sm opacity-60">Active Tasks</p>
+          <h3 className="mt-3 text-4xl font-bold">
+            {loadingStats ? "..." : taskStats.active}
+          </h3>
+        </div>
 
-              <div className="space-y-4">
-                <Sidebar
-                  selectedPersonaName={selectedPersonaName}
-                  onNavigate={() => setSidebarOpen(false)}
-                />
-              </div>
-            </aside>
-          </>
-        )}
-
-        <main className="min-w-0 flex-1">
-          <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-base-300 bg-base-100 p-5 shadow-sm md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold md:text-4xl">Tasks</h1>
-              <p className="mt-1 text-sm opacity-70 md:text-base">
-                View and manage tasks for the active persona.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium opacity-70">Mode</span>
-                {loading ? (
-                  <span className="text-sm">Loading...</span>
-                ) : error ? (
-                  <span className="text-sm text-error">{error}</span>
-                ) : personas.length === 0 ? (
-                  <span className="text-sm">No personas found</span>
-                ) : (
-                  <select
-                    className="select select-bordered rounded-2xl"
-                    value={selectedPersona}
-                    onChange={handlePersonaChange}
-                  >
-                    {personas.map((persona) => (
-                      <option key={persona._id} value={persona._id}>
-                        {persona.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div className="badge badge-outline rounded-full px-4 py-3">
-                {online ? "Online" : "Offline"}
-              </div>
-            </div>
-          </div>
-
-          <TaskManager selectedPersona={selectedPersona} />
-        </main>
+        <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+          <p className="text-sm opacity-60">Completed Tasks</p>
+          <h3 className="mt-3 text-4xl font-bold">
+            {loadingStats ? "..." : taskStats.completed}
+          </h3>
+        </div>
       </div>
-    </div>
+
+      <TaskManager
+        selectedPersona={selectedPersona}
+        selectedPersonaName={selectedPersonaName}
+        key={displayPersonaName}
+      />
+    </>
   );
 }
 
