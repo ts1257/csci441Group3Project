@@ -1,18 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import Sidebar from "../components/dashboard/Sidebar";
+import DashboardLayout from "../components/dashboard/DashboardLayout";
 
 function Calendar() {
-  const [online, setOnline] = useState(navigator.onLine);
-  const [personas, setPersonas] = useState([]);
-  const [selectedPersona, setSelectedPersona] = useState("");
-  const [selectedPersonaName, setSelectedPersonaName] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState("");
+
+  const [plannedPayments, setPlannedPayments] = useState([]);
 
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -24,106 +18,131 @@ function Calendar() {
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
 
-  useEffect(() => {
-    const goOnline = () => setOnline(true);
-    const goOffline = () => setOnline(false);
+  const parseLocalDate = (dateString) => {
+    if (!dateString) return null;
+    const datePart = dateString.includes("T")
+      ? dateString.split("T")[0]
+      : dateString;
+    const [year, month, day] = datePart.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  };
 
-    window.addEventListener("online", goOnline);
-    window.addEventListener("offline", goOffline);
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "No due date";
+    return parseLocalDate(dateValue).toLocaleDateString();
+  };
 
-    return () => {
-      window.removeEventListener("online", goOnline);
-      window.removeEventListener("offline", goOffline);
-    };
+  const dateKey = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const today = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }, []);
 
+  const priorityDotClass = (priority) => {
+    if (priority === "high") return "bg-error";
+    if (priority === "medium") return "bg-warning";
+    if (priority === "low") return "bg-success";
+    return "bg-base-300";
+  };
+
+  const changeMonth = (offset) => {
+    const nextMonth = new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth() + offset,
+      1,
+    );
+    setCurrentMonth(nextMonth);
+    setSelectedDate(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1));
+  };
+
+  const isSameDate = (a, b) =>
+    a &&
+    b &&
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  return (
+    <DashboardLayout
+      title="Calendar"
+      subtitle="View tasks on a monthly calendar for the active persona."
+      financeTitle="Calendar"
+      financeSubtitle="View planned payments on a monthly calendar for Finance mode."
+    >
+      {({ selectedPersona, selectedPersonaName, isFinance }) => (
+        <CalendarContent
+          selectedPersona={selectedPersona}
+          selectedPersonaName={selectedPersonaName}
+          isFinance={isFinance}
+          tasks={tasks}
+          setTasks={setTasks}
+          tasksLoading={tasksLoading}
+          setTasksLoading={setTasksLoading}
+          tasksError={tasksError}
+          setTasksError={setTasksError}
+          plannedPayments={plannedPayments}
+          setPlannedPayments={setPlannedPayments}
+          currentMonth={currentMonth}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          parseLocalDate={parseLocalDate}
+          formatDate={formatDate}
+          dateKey={dateKey}
+          today={today}
+          priorityDotClass={priorityDotClass}
+          changeMonth={changeMonth}
+          isSameDate={isSameDate}
+        />
+      )}
+    </DashboardLayout>
+  );
+}
+
+function CalendarContent({
+  selectedPersona,
+  selectedPersonaName,
+  isFinance,
+  tasks,
+  setTasks,
+  tasksLoading,
+  setTasksLoading,
+  tasksError,
+  setTasksError,
+  plannedPayments,
+  setPlannedPayments,
+  currentMonth,
+  selectedDate,
+  setSelectedDate,
+  parseLocalDate,
+  formatDate,
+  dateKey,
+  today,
+  priorityDotClass,
+  changeMonth,
+  isSameDate,
+}) {
   useEffect(() => {
-    const openSidebar = () => setSidebarOpen(true);
+    const storedPayments = localStorage.getItem("plannedPayments");
 
-    window.addEventListener("open-dashboard-sidebar", openSidebar);
-
-    return () => {
-      window.removeEventListener("open-dashboard-sidebar", openSidebar);
-    };
-  }, []);
-
-  useEffect(() => {
-    const fetchPersonas = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const token = localStorage.getItem("token");
-
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/personas`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Failed to fetch personas");
-        }
-
-        const personaList = Array.isArray(data)
-          ? data
-          : Array.isArray(data.personas)
-            ? data.personas
-            : Array.isArray(data.data)
-              ? data.data
-              : [];
-
-        setPersonas(personaList);
-
-        const savedPersonaId = localStorage.getItem("activePersonaId");
-        const savedPersonaName = localStorage.getItem("activePersonaName");
-
-        let initialPersona = null;
-
-        if (savedPersonaId) {
-          initialPersona = personaList.find(
-            (persona) => persona._id === savedPersonaId,
-          );
-        }
-
-        if (!initialPersona && savedPersonaName) {
-          initialPersona = personaList.find(
-            (persona) =>
-              persona.name?.toLowerCase().trim() ===
-              savedPersonaName.toLowerCase().trim(),
-          );
-        }
-
-        if (!initialPersona && personaList.length > 0) {
-          initialPersona = personaList[0];
-        }
-
-        if (initialPersona) {
-          setSelectedPersona(initialPersona._id);
-          setSelectedPersonaName(initialPersona.name);
-          localStorage.setItem("activePersonaId", initialPersona._id);
-          localStorage.setItem("activePersonaName", initialPersona.name);
-        }
-      } catch (err) {
-        setError(err.message || "Something went wrong");
-        setPersonas([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPersonas();
-  }, []);
+    try {
+      const parsedPayments = storedPayments ? JSON.parse(storedPayments) : [];
+      setPlannedPayments(Array.isArray(parsedPayments) ? parsedPayments : []);
+    } catch {
+      setPlannedPayments([]);
+    }
+  }, [selectedPersonaName, setPlannedPayments]);
 
   useEffect(() => {
     const fetchTasks = async () => {
-      if (!selectedPersona) {
+      if (!selectedPersona || isFinance) {
         setTasks([]);
+        setTasksLoading(false);
         return;
       }
 
@@ -173,72 +192,78 @@ function Calendar() {
     };
 
     fetchTasks();
-  }, [selectedPersona]);
-
-  const handlePersonaChange = (e) => {
-    const personaId = e.target.value;
-    const foundPersona = personas.find((persona) => persona._id === personaId);
-
-    setSelectedPersona(personaId);
-    setSelectedPersonaName(foundPersona ? foundPersona.name : "");
-
-    localStorage.setItem("activePersonaId", personaId);
-    localStorage.setItem(
-      "activePersonaName",
-      foundPersona ? foundPersona.name : "",
-    );
-  };
-
-  const parseLocalDate = (dateString) => {
-    if (!dateString) return null;
-
-    const datePart = dateString.includes("T")
-      ? dateString.split("T")[0]
-      : dateString;
-    const [year, month, day] = datePart.split("-").map(Number);
-    return new Date(year, month - 1, day);
-  };
-
-  const formatDate = (dateValue) => {
-    if (!dateValue) return "No due date";
-    return parseLocalDate(dateValue).toLocaleDateString();
-  };
-
-  const dateKey = (date) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  };
-
-  const today = useMemo(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  }, []);
-
-  const priorityDotClass = (priority) => {
-    if (priority === "high") return "bg-error";
-    if (priority === "medium") return "bg-warning";
-    if (priority === "low") return "bg-success";
-    return "bg-base-300";
-  };
+  }, [selectedPersona, isFinance, setTasks, setTasksLoading, setTasksError]);
 
   const tasksByDate = useMemo(() => {
     const map = new Map();
 
     tasks.forEach((task) => {
       if (!task.dueDate) return;
+
       const localDate = parseLocalDate(task.dueDate);
       const key = dateKey(localDate);
 
       if (!map.has(key)) {
         map.set(key, []);
       }
-      map.get(key).push(task);
+
+      map.get(key).push({
+        id: task._id,
+        kind: "task",
+        title: task.title,
+        description: task.description || "",
+        dueDate: task.dueDate,
+        priority: task.priority || "",
+        status: task.status || "",
+      });
     });
 
     return map;
-  }, [tasks]);
+  }, [tasks, parseLocalDate, dateKey]);
+
+  const plannedPaymentsByDate = useMemo(() => {
+    const map = new Map();
+
+    plannedPayments.forEach((payment) => {
+      if (!payment.dueDate) return;
+
+      const localDate = parseLocalDate(payment.dueDate);
+      const key = dateKey(localDate);
+
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+
+      map.get(key).push({
+        id: payment.id,
+        kind: "planned-payment",
+        title: payment.title,
+        description: payment.notes || "",
+        dueDate: payment.dueDate,
+        amount: payment.amount || 0,
+        status: payment.status || "pending",
+      });
+    });
+
+    return map;
+  }, [plannedPayments, parseLocalDate, dateKey]);
+
+  const calendarItemsByDate = useMemo(() => {
+    const map = new Map();
+
+    if (isFinance) {
+      plannedPaymentsByDate.forEach((items, key) => {
+        map.set(key, items);
+      });
+      return map;
+    }
+
+    tasksByDate.forEach((items, key) => {
+      map.set(key, items);
+    });
+
+    return map;
+  }, [isFinance, plannedPaymentsByDate, tasksByDate]);
 
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
@@ -270,9 +295,17 @@ function Calendar() {
     [calendarDays],
   );
 
-  const selectedDateTasks = useMemo(() => {
+  const selectedDateItems = useMemo(() => {
     const key = dateKey(selectedDate);
-    const list = tasksByDate.get(key) || [];
+    const list = calendarItemsByDate.get(key) || [];
+
+    if (isFinance) {
+      return [...list].sort((a, b) => {
+        if (a.status === b.status) return 0;
+        if (a.status === "pending") return -1;
+        return 1;
+      });
+    }
 
     const priorityOrder = { high: 3, medium: 2, low: 1 };
 
@@ -281,30 +314,7 @@ function Calendar() {
       const priorityB = priorityOrder[b.priority] || 0;
       return priorityB - priorityA;
     });
-  }, [selectedDate, tasksByDate]);
-
-  const changeMonth = (offset) => {
-    const nextMonth = new Date(
-      currentMonth.getFullYear(),
-      currentMonth.getMonth() + offset,
-      1,
-    );
-    setCurrentMonth(nextMonth);
-
-    const nextSelected = new Date(
-      nextMonth.getFullYear(),
-      nextMonth.getMonth(),
-      1,
-    );
-    setSelectedDate(nextSelected);
-  };
-
-  const isSameDate = (a, b) =>
-    a &&
-    b &&
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
+  }, [selectedDate, calendarItemsByDate, isFinance, dateKey]);
 
   const monthTitle = currentMonth.toLocaleDateString(undefined, {
     month: "long",
@@ -312,323 +322,329 @@ function Calendar() {
   });
 
   const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const calendarLabel = isFinance ? "planned payments" : "tasks";
+  const selectedDateLabel = isFinance ? "Planned payments" : "Tasks";
+
+  const totalPlannedPayments = useMemo(
+    () => plannedPayments.length,
+    [plannedPayments],
+  );
+
+  const financeThisMonth = useMemo(() => {
+    return plannedPayments.filter((payment) => {
+      if (!payment.dueDate) return false;
+      const d = parseLocalDate(payment.dueDate);
+      return (
+        d.getMonth() === currentMonth.getMonth() &&
+        d.getFullYear() === currentMonth.getFullYear()
+      );
+    }).length;
+  }, [plannedPayments, currentMonth, parseLocalDate]);
+
+  const totalTasks = useMemo(() => tasks.length, [tasks]);
+
+  const tasksThisMonth = useMemo(() => {
+    return tasks.filter((task) => {
+      if (!task.dueDate) return false;
+      const d = parseLocalDate(task.dueDate);
+      return (
+        d.getMonth() === currentMonth.getMonth() &&
+        d.getFullYear() === currentMonth.getFullYear()
+      );
+    }).length;
+  }, [tasks, currentMonth, parseLocalDate]);
 
   return (
-    <div className="min-h-[calc(100vh-73px)] bg-base-200">
-      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
-        <aside className="hidden w-72 shrink-0 lg:block">
-          <div className="sticky top-28 space-y-4">
-            <Sidebar
-              selectedPersonaName={selectedPersonaName}
-              onNavigate={() => setSidebarOpen(false)}
-            />
+    <>
+      {isFinance ? (
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+            <p className="text-sm opacity-60">Total Planned Payments</p>
+            <h3 className="mt-3 text-4xl font-bold">{totalPlannedPayments}</h3>
           </div>
-        </aside>
 
-        {sidebarOpen && (
+          <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+            <p className="text-sm opacity-60">This Month</p>
+            <h3 className="mt-3 text-4xl font-bold">{financeThisMonth}</h3>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+            <p className="text-sm opacity-60">Total Tasks</p>
+            <h3 className="mt-3 text-4xl font-bold">{totalTasks}</h3>
+          </div>
+
+          <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+            <p className="text-sm opacity-60">This Month</p>
+            <h3 className="mt-3 text-4xl font-bold">{tasksThisMonth}</h3>
+          </div>
+        </div>
+      )}
+
+      <section className="rounded-[2rem] border border-base-300 bg-base-100 p-4 shadow-sm md:p-6">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <button
+            className="btn btn-outline btn-sm rounded-2xl sm:btn-md"
+            onClick={() => changeMonth(-1)}
+          >
+            Prev
+          </button>
+
+          <h2 className="text-center text-lg font-bold sm:text-xl md:text-2xl">
+            {monthTitle}
+          </h2>
+
+          <button
+            className="btn btn-outline btn-sm rounded-2xl sm:btn-md"
+            onClick={() => changeMonth(1)}
+          >
+            Next
+          </button>
+        </div>
+
+        {tasksLoading ? (
+          <p>Loading calendar...</p>
+        ) : tasksError ? (
+          <p className="text-error">{tasksError}</p>
+        ) : (
           <>
-            <div
-              className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <aside className="fixed right-0 top-0 z-50 h-full w-72 overflow-y-auto bg-base-200 p-4 lg:hidden">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold">Menu</h2>
-                <button
-                  className="btn btn-ghost btn-sm rounded-xl"
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <Sidebar
-                  selectedPersonaName={selectedPersonaName}
-                  onNavigate={() => setSidebarOpen(false)}
-                />
-              </div>
-            </aside>
-          </>
-        )}
-
-        <main className="min-w-0 flex-1">
-          <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-base-300 bg-base-100 p-5 shadow-sm md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold md:text-4xl">Calendar</h1>
-              <p className="mt-1 text-sm opacity-70 md:text-base">
-                View tasks on a monthly calendar for the active persona.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium opacity-70">Mode</span>
-                {loading ? (
-                  <span className="text-sm">Loading...</span>
-                ) : error ? (
-                  <span className="text-sm text-error">{error}</span>
-                ) : personas.length === 0 ? (
-                  <span className="text-sm">No personas found</span>
-                ) : (
-                  <select
-                    className="select select-bordered rounded-2xl"
-                    value={selectedPersona}
-                    onChange={handlePersonaChange}
-                  >
-                    {personas.map((persona) => (
-                      <option key={persona._id} value={persona._id}>
-                        {persona.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div className="badge badge-outline rounded-full px-4 py-3">
-                {online ? "Online" : "Offline"}
-              </div>
-            </div>
-          </div>
-
-          <section className="rounded-[2rem] border border-base-300 bg-base-100 p-4 shadow-sm md:p-6">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <button
-                className="btn btn-outline btn-sm rounded-2xl sm:btn-md"
-                onClick={() => changeMonth(-1)}
-              >
-                Prev
-              </button>
-
-              <h2 className="text-center text-lg font-bold sm:text-xl md:text-2xl">
-                {monthTitle}
-              </h2>
-
-              <button
-                className="btn btn-outline btn-sm rounded-2xl sm:btn-md"
-                onClick={() => changeMonth(1)}
-              >
-                Next
-              </button>
-            </div>
-
-            {tasksLoading ? (
-              <p>Loading calendar...</p>
-            ) : tasksError ? (
-              <p className="text-error">{tasksError}</p>
-            ) : (
-              <>
-                <div className="hidden md:block">
-                  <div className="mb-3 grid grid-cols-7 gap-2 text-center text-sm font-semibold opacity-70">
-                    {weekdayLabels.map((label) => (
-                      <div key={label} className="py-2">
-                        {label}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-7 gap-2">
-                    {calendarDays.map((day, index) => {
-                      if (!day) {
-                        return (
-                          <div
-                            key={`empty-${index}`}
-                            className="min-h-28 rounded-2xl bg-base-200"
-                          />
-                        );
-                      }
-
-                      const key = dateKey(day);
-                      const dayTasks = tasksByDate.get(key) || [];
-                      const isSelected = isSameDate(day, selectedDate);
-                      const isToday = isSameDate(day, today);
-
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setSelectedDate(day)}
-                          className={`min-h-28 rounded-2xl border p-2 text-left transition ${
-                            isSelected
-                              ? "border-primary bg-primary/10"
-                              : "border-base-300 bg-base-100 hover:bg-base-200"
-                          }`}
-                        >
-                          <div className="mb-2 flex items-center justify-between">
-                            <span
-                              className={`text-sm font-semibold ${
-                                isToday ? "text-primary" : ""
-                              }`}
-                            >
-                              {day.getDate()}
-                            </span>
-                            {dayTasks.length > 0 && (
-                              <span className="badge badge-primary badge-sm">
-                                {dayTasks.length}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="space-y-1">
-                            {dayTasks.slice(0, 2).map((task) => (
-                              <div
-                                key={task._id}
-                                className="flex items-center gap-1 truncate rounded-lg bg-base-200 px-2 py-1 text-xs"
-                              >
-                                <span
-                                  className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(
-                                    task.priority,
-                                  )}`}
-                                />
-                                <span className="truncate">{task.title}</span>
-                              </div>
-                            ))}
-                            {dayTasks.length > 2 && (
-                              <div className="text-xs opacity-60">
-                                +{dayTasks.length - 2} more
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="md:hidden">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {mobileDays.map((day) => {
-                      const key = dateKey(day);
-                      const dayTasks = tasksByDate.get(key) || [];
-                      const isSelected = isSameDate(day, selectedDate);
-                      const isToday = isSameDate(day, today);
-
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setSelectedDate(day)}
-                          className={`rounded-2xl border p-3 text-left transition ${
-                            isSelected
-                              ? "border-primary bg-primary/10"
-                              : "border-base-300 bg-base-100"
-                          }`}
-                        >
-                          <div className="mb-2 flex items-center justify-between">
-                            <div>
-                              <p className="text-xs opacity-60">
-                                {day.toLocaleDateString(undefined, {
-                                  weekday: "short",
-                                })}
-                              </p>
-                              <p
-                                className={`text-lg font-bold ${
-                                  isToday ? "text-primary" : ""
-                                }`}
-                              >
-                                {day.getDate()}
-                              </p>
-                            </div>
-
-                            {dayTasks.length > 0 && (
-                              <span className="badge badge-primary badge-sm">
-                                {dayTasks.length}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="space-y-1">
-                            {dayTasks.slice(0, 2).map((task) => (
-                              <div
-                                key={task._id}
-                                className="flex items-center gap-1 text-xs"
-                              >
-                                <span
-                                  className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(
-                                    task.priority,
-                                  )}`}
-                                />
-                                <span className="truncate">{task.title}</span>
-                              </div>
-                            ))}
-                            {dayTasks.length === 0 && (
-                              <p className="text-xs opacity-50">No tasks</p>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
-
-          <section className="mt-6 rounded-[2rem] border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-xl font-bold sm:text-2xl">
-                Tasks for {selectedDate.toLocaleDateString()}
-              </h2>
-
-              <div className="flex flex-wrap gap-3 text-xs sm:text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-error" />
-                  <span>High</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-warning" />
-                  <span>Medium</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-success" />
-                  <span>Low</span>
-                </div>
-              </div>
-            </div>
-
-            {selectedDateTasks.length === 0 ? (
-              <p className="opacity-70">No tasks for this date.</p>
-            ) : (
-              <div className="space-y-4">
-                {selectedDateTasks.map((task) => (
-                  <div
-                    key={task._id}
-                    className="rounded-3xl border border-base-300 p-5"
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold">{task.title}</h3>
-                        <p className="mt-1 text-sm opacity-70">
-                          {task.description || "No description"}
-                        </p>
-                        <p className="mt-2 text-sm opacity-60">
-                          Due: {formatDate(task.dueDate)}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <span className="badge badge-outline flex items-center gap-2">
-                          <span
-                            className={`h-2 w-2 rounded-full ${priorityDotClass(
-                              task.priority,
-                            )}`}
-                          />
-                          {task.priority
-                            ? task.priority.charAt(0).toUpperCase() +
-                              task.priority.slice(1)
-                            : "No Priority"}
-                        </span>
-                        <span className="badge badge-outline">
-                          {task.status || "No Status"}
-                        </span>
-                      </div>
-                    </div>
+            <div className="hidden md:block">
+              <div className="mb-3 grid grid-cols-7 gap-2 text-center text-sm font-semibold opacity-70">
+                {weekdayLabels.map((label) => (
+                  <div key={label} className="py-2">
+                    {label}
                   </div>
                 ))}
               </div>
-            )}
-          </section>
-        </main>
-      </div>
-    </div>
+
+              <div className="grid grid-cols-7 gap-2">
+                {calendarDays.map((day, index) => {
+                  if (!day) {
+                    return (
+                      <div
+                        key={`empty-${index}`}
+                        className="min-h-28 rounded-2xl bg-base-200"
+                      />
+                    );
+                  }
+
+                  const key = dateKey(day);
+                  const dayItems = calendarItemsByDate.get(key) || [];
+                  const isSelected = isSameDate(day, selectedDate);
+                  const isToday = isSameDate(day, today);
+
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedDate(day)}
+                      className={`min-h-28 rounded-2xl border p-2 text-left transition ${
+                        isSelected
+                          ? "border-primary bg-primary/10"
+                          : "border-base-300 bg-base-100 hover:bg-base-200"
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        <span
+                          className={`text-sm font-semibold ${
+                            isToday ? "text-primary" : ""
+                          }`}
+                        >
+                          {day.getDate()}
+                        </span>
+                        {dayItems.length > 0 && (
+                          <span className="badge badge-primary badge-sm">
+                            {dayItems.length}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        {dayItems.slice(0, 2).map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center gap-1 truncate rounded-lg bg-base-200 px-2 py-1 text-xs"
+                          >
+                            {!isFinance ? (
+                              <span
+                                className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(
+                                  item.priority,
+                                )}`}
+                              />
+                            ) : (
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+                            )}
+                            <span className="truncate">{item.title}</span>
+                          </div>
+                        ))}
+                        {dayItems.length > 2 && (
+                          <div className="text-xs opacity-60">
+                            +{dayItems.length - 2} more
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="md:hidden">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {mobileDays.map((day) => {
+                  const key = dateKey(day);
+                  const dayItems = calendarItemsByDate.get(key) || [];
+                  const isSelected = isSameDate(day, selectedDate);
+                  const isToday = isSameDate(day, today);
+
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedDate(day)}
+                      className={`rounded-2xl border p-3 text-left transition ${
+                        isSelected
+                          ? "border-primary bg-primary/10"
+                          : "border-base-300 bg-base-100"
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs opacity-60">
+                            {day.toLocaleDateString(undefined, {
+                              weekday: "short",
+                            })}
+                          </p>
+                          <p
+                            className={`text-lg font-bold ${
+                              isToday ? "text-primary" : ""
+                            }`}
+                          >
+                            {day.getDate()}
+                          </p>
+                        </div>
+
+                        {dayItems.length > 0 && (
+                          <span className="badge badge-primary badge-sm">
+                            {dayItems.length}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        {dayItems.slice(0, 2).map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center gap-1 text-xs"
+                          >
+                            {!isFinance ? (
+                              <span
+                                className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(
+                                  item.priority,
+                                )}`}
+                              />
+                            ) : (
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+                            )}
+                            <span className="truncate">{item.title}</span>
+                          </div>
+                        ))}
+                        {dayItems.length === 0 && (
+                          <p className="text-xs opacity-50">
+                            No {isFinance ? "payments" : "tasks"}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="mt-6 rounded-[2rem] border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-bold sm:text-2xl">
+            {selectedDateLabel} for {selectedDate.toLocaleDateString()}
+          </h2>
+
+          {!isFinance && (
+            <div className="flex flex-wrap gap-3 text-xs sm:text-sm">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-error" />
+                <span>High</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-warning" />
+                <span>Medium</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-success" />
+                <span>Low</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {selectedDateItems.length === 0 ? (
+          <p className="opacity-70">
+            No {isFinance ? "planned payments" : "tasks"} for this date.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {selectedDateItems.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-3xl border border-base-300 p-5"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold">{item.title}</h3>
+                    <p className="mt-1 text-sm opacity-70">
+                      {item.description || "No description"}
+                    </p>
+                    <p className="mt-2 text-sm opacity-60">
+                      Due: {formatDate(item.dueDate)}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {isFinance ? (
+                      <>
+                        <span className="badge badge-outline">
+                          {item.status || "pending"}
+                        </span>
+                        <span className="badge badge-outline">
+                          ${Number(item.amount || 0).toFixed(2)}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="badge badge-outline flex items-center gap-2">
+                          <span
+                            className={`h-2 w-2 rounded-full ${priorityDotClass(
+                              item.priority,
+                            )}`}
+                          />
+                          {item.priority
+                            ? item.priority.charAt(0).toUpperCase() +
+                              item.priority.slice(1)
+                            : "No Priority"}
+                        </span>
+                        <span className="badge badge-outline">
+                          {item.status || "No Status"}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 
