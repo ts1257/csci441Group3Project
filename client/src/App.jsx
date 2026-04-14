@@ -10,6 +10,10 @@ import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
 import Courses from "./pages/Courses";
 import Calendar from "./pages/Calendar";
+import Records from "./pages/Records";
+import PlannedPayments from "./pages/PlannedPayments";
+import Category from "./pages/Category";
+import Projects from "./pages/Projects";
 
 function App() {
   return (
@@ -52,6 +56,32 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/dashboard/records"
+            element={
+              <ProtectedRoute>
+                <Records />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/dashboard/planned-payments"
+            element={
+              <ProtectedRoute>
+                <PlannedPayments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/category"
+            element={
+              <ProtectedRoute>
+                <Category />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/dashboard/projects" element={<Projects />} />
         </Routes>
       </div>
       <Footer />
