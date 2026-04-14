@@ -39,7 +39,7 @@ function Login() {
       setForm({ email: "", password: "" });
 
       setTimeout(() => {
-        navigate("/");
+        navigate("/dashboard");
       }, 700);
     } catch (requestError) {
       setError(requestError.message || "Login failed");
@@ -50,7 +50,7 @@ function Login() {
 
   return (
     <div className="min-h-[80vh] flex items-center">
-      <div className="flex flex-col lg:flex-row-reverse gap-10 lg:gap-20 w-full">
+      <div className="hero-content flex-col lg:flex-row gap-10 lg:gap-10 w-full">
         <div className="text-center lg:text-left flex-1">
           <h1 className="text-4xl sm:text-5xl font-bold">Welcome back</h1>
           <p className="py-6 text-base sm:text-lg text-gray-600">

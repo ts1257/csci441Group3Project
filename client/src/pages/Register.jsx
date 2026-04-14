@@ -52,7 +52,7 @@ function Register() {
       setForm({ name: "", email: "", password: "", confirmPassword: "" });
 
       setTimeout(() => {
-        navigate("/");
+        navigate("/login");
       }, 700);
     } catch (requestError) {
       setError(requestError.message || "Registration failed");
