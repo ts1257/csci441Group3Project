@@ -231,7 +231,7 @@ function Courses() {
             </div>
           </div>
 
-          <section className="rounded-[2rem] border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+          <section className="rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
             <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <h2 className="text-2xl font-bold md:text-3xl">My Courses</h2>
 
@@ -276,7 +276,7 @@ function Courses() {
                     }`}
                   >
                     <div className="mb-3 flex items-start justify-between gap-3">
-                      <h3 className="text-xl font-semibold break-words">
+                      <h3 className="text-xl font-semibold wrap-break-wordword">
                         {course.name}
                       </h3>
                       <span
@@ -286,15 +286,15 @@ function Courses() {
                       </span>
                     </div>
 
-                    <p className="text-sm opacity-60 break-words">
+                    <p className="text-sm opacity-60 wrap-break-word">
                       Instructor: {course.instructor || "Not set"}
                     </p>
 
-                    <p className="mt-1 text-sm opacity-60 break-words">
+                    <p className="mt-1 text-sm opacity-60 wrap-break-word">
                       Credits: {course.credits || "Not set"}
                     </p>
 
-                    <p className="mt-3 text-sm opacity-70 break-words whitespace-pre-wrap overflow-hidden">
+                    <p className="mt-3 text-sm opacity-70 wrap-break-word whitespace-pre-wrap overflow-hidden">
                       {course.notes || "No notes"}
                     </p>
 
@@ -336,8 +336,8 @@ function Courses() {
           </section>
 
           {showAddCourseModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60lex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Add Course</h2>
                   <button
@@ -469,8 +469,8 @@ function Courses() {
           )}
 
           {showEditCourseModal && selectedCourse && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60lex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Edit Course</h2>
                   <button
@@ -600,8 +600,8 @@ function Courses() {
           )}
 
           {showViewCourseModal && selectedCourse && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60lex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Course Details</h2>
                   <button
@@ -618,14 +618,14 @@ function Courses() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm opacity-60">Course Name</p>
-                    <p className="mt-1 text-lg font-semibold break-words">
+                    <p className="mt-1 text-lg font-semibold wrap-break-wordword">
                       {selectedCourse.name}
                     </p>
                   </div>
 
                   <div>
                     <p className="text-sm opacity-60">Instructor</p>
-                    <p className="mt-1 break-words">
+                    <p className="mt-1 wrap-break-word">
                       {selectedCourse.instructor || "Not set"}
                     </p>
                   </div>
@@ -648,7 +648,7 @@ function Courses() {
 
                   <div>
                     <p className="text-sm opacity-60">Notes</p>
-                    <p className="mt-1 break-words whitespace-pre-wrap">
+                    <p className="mt-1 wrap-break-word whitespace-pre-wrap">
                       {selectedCourse.notes || "No notes"}
                     </p>
                   </div>

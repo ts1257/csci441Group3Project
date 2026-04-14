@@ -313,7 +313,7 @@ function Category() {
             </div>
           </div>
 
-          <section className="rounded-[2rem] border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+          <section className="rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-2xl font-bold md:text-3xl">
                 Category Structure
@@ -352,7 +352,7 @@ function Category() {
                               <span className="text-sm">
                                 {isExpanded ? "▾" : "▸"}
                               </span>
-                              <span className="font-semibold break-words">
+                              <span className="font-semibold wrap-break-word">
                                 {category.name}
                               </span>
                             </button>
@@ -409,8 +409,8 @@ function Category() {
           </section>
 
           {(showAddModal || showEditModal) && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-xl rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-xl rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">
                     {showAddModal ? "Add Category" : "Edit Category"}

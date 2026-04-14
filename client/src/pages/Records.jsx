@@ -323,7 +323,7 @@ function Records() {
             </div>
           </div>
 
-          <section className="rounded-[2rem] border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+          <section className="rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
             <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <h2 className="text-2xl font-bold md:text-3xl">
                 Finance Records
@@ -368,11 +368,11 @@ function Records() {
                   >
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
-                        <h3 className="text-lg font-semibold break-words">
+                        <h3 className="text-lg font-semibold wrap-break-word">
                           {record.title}
                         </h3>
 
-                        <p className="mt-1 text-sm opacity-70 break-words">
+                        <p className="mt-1 text-sm opacity-70 wrap-break-word">
                           Category: {record.category || "Uncategorized"}
                           {record.subcategory ? ` / ${record.subcategory}` : ""}
                         </p>
@@ -381,7 +381,7 @@ function Records() {
                           Date: {record.date || "No date"}
                         </p>
 
-                        <p className="mt-2 text-sm opacity-70 break-words whitespace-pre-wrap">
+                        <p className="mt-2 text-sm opacity-70 wrap-break-word whitespace-pre-wrap">
                           {record.notes || "No notes"}
                         </p>
                       </div>
@@ -429,8 +429,8 @@ function Records() {
           </section>
 
           {showAddRecordModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Add Record</h2>
                   <button
@@ -585,8 +585,8 @@ function Records() {
           )}
 
           {showEditRecordModal && selectedRecord && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Edit Record</h2>
                   <button
@@ -740,8 +740,8 @@ function Records() {
           )}
 
           {showViewRecordModal && selectedRecord && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Record Details</h2>
                   <button
@@ -758,7 +758,7 @@ function Records() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm opacity-60">Title</p>
-                    <p className="mt-1 text-lg font-semibold break-words">
+                    <p className="mt-1 text-lg font-semibold wrap-break-word">
                       {selectedRecord.title}
                     </p>
                   </div>
@@ -794,7 +794,7 @@ function Records() {
 
                   <div>
                     <p className="text-sm opacity-60">Notes</p>
-                    <p className="mt-1 break-words whitespace-pre-wrap">
+                    <p className="mt-1 wrap-break-word whitespace-pre-wrap">
                       {selectedRecord.notes || "No notes"}
                     </p>
                   </div>

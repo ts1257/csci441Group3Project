@@ -587,10 +587,10 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
                 >
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0">
-                      <h3 className="text-lg font-semibold break-words">
+                      <h3 className="text-lg font-semibold wrap-break-word">
                         {task.title}
                       </h3>
-                      <p className="mt-1 text-sm opacity-70 break-words whitespace-pre-wrap">
+                      <p className="mt-1 text-sm opacity-70 wrap-break-word whitespace-pre-wrap">
                         {task.description || "No description"}
                       </p>
                       {renderPersonaMeta(task)}
@@ -899,14 +899,14 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
             <div className="space-y-4">
               <div>
                 <p className="text-sm opacity-60">Title</p>
-                <p className="mt-1 text-lg font-semibold break-words">
+                <p className="mt-1 text-lg font-semibold wrap-break-word">
                   {selectedTask.title}
                 </p>
               </div>
 
               <div>
                 <p className="text-sm opacity-60">Description</p>
-                <p className="mt-1 break-words whitespace-pre-wrap">
+                <p className="mt-1 wrap-break-word whitespace-pre-wrap">
                   {selectedTask.description || "No description"}
                 </p>
               </div>

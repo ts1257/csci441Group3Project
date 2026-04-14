@@ -188,7 +188,7 @@ function PlannedPayments() {
             </div>
           </div>
 
-          <section className="rounded-[2rem] border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+          <section className="rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
             <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <h2 className="text-2xl font-bold md:text-3xl">
                 Planned Payments
@@ -233,7 +233,7 @@ function PlannedPayments() {
                   >
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
-                        <h3 className="text-lg font-semibold break-words">
+                        <h3 className="text-lg font-semibold wrap-break-word">
                           {payment.title}
                         </h3>
 
@@ -241,7 +241,7 @@ function PlannedPayments() {
                           Due: {payment.dueDate || "No due date"}
                         </p>
 
-                        <p className="mt-2 text-sm opacity-70 break-words whitespace-pre-wrap">
+                        <p className="mt-2 text-sm opacity-70 wrap-break-wordword whitespace-pre-wrap">
                           {payment.notes || "No notes"}
                         </p>
                       </div>
@@ -289,8 +289,8 @@ function PlannedPayments() {
           </section>
 
           {showAddPaymentModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xlrder border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Add Planned Payment</h2>
                   <button
@@ -405,8 +405,8 @@ function PlannedPayments() {
           )}
 
           {showEditPaymentModal && selectedPayment && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Edit Planned Payment</h2>
                   <button
@@ -520,8 +520,8 @@ function PlannedPayments() {
           )}
 
           {showViewPaymentModal && selectedPayment && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">
                     Planned Payment Details
@@ -540,7 +540,7 @@ function PlannedPayments() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm opacity-60">Title</p>
-                    <p className="mt-1 text-lg font-semibold break-words">
+                    <p className="mt-1 text-lg font-semibold wrap-break-word">
                       {selectedPayment.title}
                     </p>
                   </div>
@@ -570,7 +570,7 @@ function PlannedPayments() {
 
                   <div>
                     <p className="text-sm opacity-60">Notes</p>
-                    <p className="mt-1 break-words whitespace-pre-wrap">
+                    <p className="mt-1 wrap-break-word whitespace-pre-wrap">
                       {selectedPayment.notes || "No notes"}
                     </p>
                   </div>

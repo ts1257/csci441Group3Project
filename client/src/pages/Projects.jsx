@@ -278,7 +278,7 @@ function Projects() {
                     }`}
                   >
                     <div className="mb-3 flex items-start justify-between gap-3">
-                      <h3 className="text-xl font-semibold break-words">
+                      <h3 className="text-xl font-semibold wrap-break-word">
                         {project.name}
                       </h3>
                       <span
@@ -288,15 +288,15 @@ function Projects() {
                       </span>
                     </div>
 
-                    <p className="text-sm opacity-60 break-words">
+                    <p className="text-sm opacity-60 wrap-break-word">
                       Client: {project.client || "Not set"}
                     </p>
 
-                    <p className="mt-1 text-sm opacity-60 break-words">
+                    <p className="mt-1 text-sm opacity-60 wrap-break-word">
                       Budget: {project.budget || "Not set"}
                     </p>
 
-                    <p className="mt-3 text-sm opacity-70 break-words whitespace-pre-wrap overflow-hidden">
+                    <p className="mt-3 text-sm opacity-70 wrap-break-word whitespace-pre-wrap overflow-hidden">
                       {project.notes || "No notes"}
                     </p>
 
@@ -618,7 +618,7 @@ function Projects() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm opacity-60">Project Name</p>
-                    <p className="mt-1 text-lg font-semibold break-words">
+                    <p className="mt-1 text-lg font-semibold wrap-break-word">
                       {selectedProject.name}
                     </p>
                   </div>
@@ -644,7 +644,7 @@ function Projects() {
 
                   <div>
                     <p className="text-sm opacity-60">Notes</p>
-                    <p className="mt-1 break-words whitespace-pre-wrap">
+                    <p className="mt-1 wrap-break-word whitespace-pre-wrap">
                       {selectedProject.notes || "No notes"}
                     </p>
                   </div>

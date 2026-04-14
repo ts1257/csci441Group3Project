@@ -382,7 +382,7 @@ function CalendarContent({
         </div>
       )}
 
-      <section className="rounded-[2rem] border border-base-300 bg-base-100 p-4 shadow-sm md:p-6">
+      <section className="rounded-4xl border border-base-300 bg-base-100 p-4 shadow-sm md:p-6">
         <div className="mb-5 flex items-center justify-between gap-3">
           <button
             className="btn btn-outline btn-sm rounded-2xl sm:btn-md"
@@ -563,7 +563,7 @@ function CalendarContent({
         )}
       </section>
 
-      <section className="mt-6 rounded-[2rem] border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+      <section className="mt-6 rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-bold sm:text-2xl">
             {selectedDateLabel} for {selectedDate.toLocaleDateString()}
