@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-function TaskManager({ selectedPersona }) {
+function TaskManager({ selectedPersona, selectedPersonaName }) {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState("");
@@ -8,16 +8,27 @@ function TaskManager({ selectedPersona }) {
 
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+  const [showViewTaskModal, setShowViewTaskModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+
   const [taskSubmitting, setTaskSubmitting] = useState(false);
   const [taskSubmitError, setTaskSubmitError] = useState("");
 
-  const [newTask, setNewTask] = useState({
+  const normalizedPersona = selectedPersonaName?.toLowerCase().trim();
+  const isStudent = normalizedPersona === "student";
+  const isWork = normalizedPersona === "work";
+
+  const getInitialTaskState = () => ({
     title: "",
     description: "",
     dueDate: "",
     priority: "medium",
     status: "todo",
+    course: "",
+    project: "",
   });
+
+  const [newTask, setNewTask] = useState(getInitialTaskState());
 
   const [editingTask, setEditingTask] = useState({
     _id: "",
@@ -26,7 +37,40 @@ function TaskManager({ selectedPersona }) {
     dueDate: "",
     priority: "medium",
     status: "todo",
+    course: "",
+    project: "",
   });
+
+  const [courses, setCourses] = useState([]);
+  const [projects, setProjects] = useState([]);
+
+  useEffect(() => {
+    setNewTask(getInitialTaskState());
+  }, [selectedPersonaName]);
+
+  useEffect(() => {
+    // Load courses for student mode
+    const storedCourses = localStorage.getItem("studentCourses");
+    try {
+      const parsedCourses = storedCourses ? JSON.parse(storedCourses) : [];
+      setCourses(
+        Array.isArray(parsedCourses) ? parsedCourses.map((c) => c.name) : [],
+      );
+    } catch {
+      setCourses([]);
+    }
+
+    // Load projects for work mode
+    const storedProjects = localStorage.getItem("workProjects");
+    try {
+      const parsedProjects = storedProjects ? JSON.parse(storedProjects) : [];
+      setProjects(
+        Array.isArray(parsedProjects) ? parsedProjects.map((p) => p.name) : [],
+      );
+    } catch {
+      setProjects([]);
+    }
+  }, []);
 
   const parseLocalDate = (dateString) => {
     if (!dateString) return null;
@@ -126,6 +170,28 @@ function TaskManager({ selectedPersona }) {
     }));
   };
 
+  const buildPayload = (taskData) => {
+    const basePayload = {
+      title: taskData.title,
+      description: taskData.description,
+      dueDate: taskData.dueDate || null,
+      priority: taskData.priority,
+      status: taskData.status,
+      persona: selectedPersona,
+      completed: taskData.status === "done",
+    };
+
+    if (isStudent) {
+      basePayload.course = taskData.course || "";
+    }
+
+    if (isWork) {
+      basePayload.project = taskData.project || "";
+    }
+
+    return basePayload;
+  };
+
   const handleAddTask = async (e) => {
     e.preventDefault();
 
@@ -144,15 +210,7 @@ function TaskManager({ selectedPersona }) {
       setTaskSubmitError("");
 
       const token = localStorage.getItem("token");
-
-      const payload = {
-        title: newTask.title,
-        description: newTask.description,
-        dueDate: newTask.dueDate || null,
-        priority: newTask.priority,
-        status: newTask.status,
-        persona: selectedPersona,
-      };
+      const payload = buildPayload(newTask);
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/tasks`,
@@ -172,7 +230,11 @@ function TaskManager({ selectedPersona }) {
         throw new Error(data.message || "Failed to create task");
       }
 
-      const createdTask = data.task || data.data || data;
+      const createdTask = {
+        ...(data.task || data.data || data),
+        course: payload.course || "",
+        project: payload.project || "",
+      };
 
       const createdTaskPersonaId =
         typeof createdTask.persona === "object"
@@ -183,14 +245,7 @@ function TaskManager({ selectedPersona }) {
         setTasks((prev) => [createdTask, ...prev]);
       }
 
-      setNewTask({
-        title: "",
-        description: "",
-        dueDate: "",
-        priority: "medium",
-        status: "todo",
-      });
-
+      setNewTask(getInitialTaskState());
       setShowAddTaskModal(false);
     } catch (err) {
       setTaskSubmitError(err.message || "Failed to create task");
@@ -199,8 +254,14 @@ function TaskManager({ selectedPersona }) {
     }
   };
 
+  const openViewTaskModal = (task) => {
+    setSelectedTask(task);
+    setShowViewTaskModal(true);
+  };
+
   const openEditTaskModal = (task) => {
     setTaskSubmitError("");
+    setSelectedTask(task);
     setEditingTask({
       _id: task._id,
       title: task.title || "",
@@ -208,6 +269,8 @@ function TaskManager({ selectedPersona }) {
       dueDate: formatDateForInput(task.dueDate),
       priority: task.priority || "medium",
       status: task.status || "todo",
+      course: task.course || "",
+      project: task.project || "",
     });
     setShowEditTaskModal(true);
   };
@@ -225,6 +288,7 @@ function TaskManager({ selectedPersona }) {
       setTaskSubmitError("");
 
       const token = localStorage.getItem("token");
+      const payload = buildPayload(editingTask);
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/tasks/${editingTask._id}`,
@@ -234,14 +298,7 @@ function TaskManager({ selectedPersona }) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            title: editingTask.title,
-            description: editingTask.description,
-            dueDate: editingTask.dueDate || null,
-            priority: editingTask.priority,
-            status: editingTask.status,
-            persona: selectedPersona,
-          }),
+          body: JSON.stringify(payload),
         },
       );
 
@@ -251,11 +308,19 @@ function TaskManager({ selectedPersona }) {
         throw new Error(data.message || "Failed to update task");
       }
 
-      const updatedTask = data.task || data.data || data;
+      const updatedTask = {
+        ...(data.task || data.data || data),
+        course: payload.course || "",
+        project: payload.project || "",
+      };
 
       setTasks((prev) =>
         prev.map((item) => (item._id === editingTask._id ? updatedTask : item)),
       );
+
+      if (selectedTask?._id === updatedTask._id) {
+        setSelectedTask(updatedTask);
+      }
 
       setShowEditTaskModal(false);
     } catch (err) {
@@ -296,6 +361,10 @@ function TaskManager({ selectedPersona }) {
       setTasks((prev) =>
         prev.map((item) => (item._id === task._id ? updatedTask : item)),
       );
+
+      if (selectedTask?._id === updatedTask._id) {
+        setSelectedTask(updatedTask);
+      }
     } catch (err) {
       setTasksError(err.message || "Failed to complete task");
     }
@@ -325,6 +394,12 @@ function TaskManager({ selectedPersona }) {
       }
 
       setTasks((prev) => prev.filter((item) => item._id !== task._id));
+
+      if (selectedTask?._id === task._id) {
+        setSelectedTask(null);
+        setShowViewTaskModal(false);
+        setShowEditTaskModal(false);
+      }
     } catch (err) {
       setTasksError(err.message || "Failed to delete task");
     }
@@ -393,59 +468,74 @@ function TaskManager({ selectedPersona }) {
       });
   }, [tasks, activeTab]);
 
-  const totalTasks = tasks.length;
+  const renderPersonaMeta = (task) => {
+    if (isStudent && task.course) {
+      return <p className="mt-1 text-sm opacity-70">Course: {task.course}</p>;
+    }
 
-  const todayCount = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    if (isWork && task.project) {
+      return <p className="mt-1 text-sm opacity-70">Project: {task.project}</p>;
+    }
 
-    return tasks.filter((task) => {
-      if (!task.dueDate) return false;
-      const taskDate = parseLocalDate(task.dueDate);
-      taskDate.setHours(0, 0, 0, 0);
-      const isCompleted = task.status === "done" || task.completed === true;
-      return taskDate.getTime() === today.getTime() && !isCompleted;
-    }).length;
-  }, [tasks]);
+    return null;
+  };
 
-  const overdueCount = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const renderPersonaFields = (taskState, onChangeHandler) => {
+    if (isStudent) {
+      return (
+        <div>
+          <label className="mb-2 block text-sm font-medium">Course</label>
+          <input
+            type="text"
+            name="course"
+            value={taskState.course}
+            onChange={onChangeHandler}
+            className="input input-bordered w-full rounded-2xl"
+            placeholder="Enter or select a course"
+            list="coursesList"
+          />
+          <datalist id="coursesList">
+            {courses.map((course, index) => (
+              <option key={index} value={course} />
+            ))}
+          </datalist>
+        </div>
+      );
+    }
 
-    return tasks.filter((task) => {
-      if (!task.dueDate) return false;
-      const taskDate = parseLocalDate(task.dueDate);
-      taskDate.setHours(0, 0, 0, 0);
-      const isCompleted = task.status === "done" || task.completed === true;
-      return taskDate.getTime() < today.getTime() && !isCompleted;
-    }).length;
-  }, [tasks]);
+    if (isWork) {
+      return (
+        <div>
+          <label className="mb-2 block text-sm font-medium">Project</label>
+          <input
+            type="text"
+            name="project"
+            value={taskState.project}
+            onChange={onChangeHandler}
+            className="input input-bordered w-full rounded-2xl"
+            placeholder="Enter or select a project"
+            list="projectsList"
+          />
+          <datalist id="projectsList">
+            {projects.map((project, index) => (
+              <option key={index} value={project} />
+            ))}
+          </datalist>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const taskStatusLabel = (task) => {
+    if (task.status === "done" || task.completed === true) return "Completed";
+    if (task.status === "in-progress") return "In Progress";
+    return "To Do";
+  };
 
   return (
     <>
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
-          <p className="text-sm font-medium uppercase tracking-wide opacity-60">
-            Total Tasks
-          </p>
-          <h3 className="mt-3 text-4xl font-bold">{totalTasks}</h3>
-        </div>
-
-        <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
-          <p className="text-sm font-medium uppercase tracking-wide opacity-60">
-            Today
-          </p>
-          <h3 className="mt-3 text-4xl font-bold">{todayCount}</h3>
-        </div>
-
-        <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
-          <p className="text-sm font-medium uppercase tracking-wide opacity-60">
-            Overdue
-          </p>
-          <h3 className="mt-3 text-4xl font-bold">{overdueCount}</h3>
-        </div>
-      </div>
-
       <section className="rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-2xl font-bold md:text-3xl">Tasks</h2>
@@ -496,25 +586,40 @@ function TaskManager({ selectedPersona }) {
                   className="rounded-3xl border border-base-300 bg-base-100 p-5"
                 >
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold">{task.title}</h3>
-                      <p className="mt-1 text-sm opacity-70">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold break-words">
+                        {task.title}
+                      </h3>
+                      <p className="mt-1 text-sm opacity-70 break-words whitespace-pre-wrap">
                         {task.description || "No description"}
                       </p>
+                      {renderPersonaMeta(task)}
                       <p className="mt-2 text-sm opacity-60">
                         Due: {formatDate(task.dueDate)}
                       </p>
                     </div>
 
                     <div className="flex flex-col items-start gap-3 md:items-end">
-                      <span className="badge badge-outline">
-                        {task.priority
-                          ? task.priority.charAt(0).toUpperCase() +
-                            task.priority.slice(1)
-                          : "No Priority"}
-                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="badge badge-outline">
+                          {task.priority
+                            ? task.priority.charAt(0).toUpperCase() +
+                              task.priority.slice(1)
+                            : "No Priority"}
+                        </span>
+                        <span className="badge badge-outline">
+                          {taskStatusLabel(task)}
+                        </span>
+                      </div>
 
                       <div className="flex flex-wrap gap-2">
+                        <button
+                          className="btn btn-outline btn-sm rounded-xl"
+                          onClick={() => openViewTaskModal(task)}
+                        >
+                          View
+                        </button>
+
                         <button
                           className="btn btn-outline btn-sm rounded-xl"
                           onClick={() => openEditTaskModal(task)}
@@ -573,6 +678,8 @@ function TaskManager({ selectedPersona }) {
                 />
               </div>
 
+              {renderPersonaFields(newTask, handleTaskInputChange)}
+
               <div>
                 <label className="mb-2 block text-sm font-medium">
                   Description
@@ -582,7 +689,7 @@ function TaskManager({ selectedPersona }) {
                   value={newTask.description}
                   onChange={handleTaskInputChange}
                   className="textarea textarea-bordered w-full rounded-2xl"
-                  placeholder="Enter task description"
+                  placeholder="Enter description"
                   rows="4"
                 />
               </div>
@@ -685,6 +792,8 @@ function TaskManager({ selectedPersona }) {
                 />
               </div>
 
+              {renderPersonaFields(editingTask, handleEditTaskInputChange)}
+
               <div>
                 <label className="mb-2 block text-sm font-medium">
                   Description
@@ -694,7 +803,7 @@ function TaskManager({ selectedPersona }) {
                   value={editingTask.description}
                   onChange={handleEditTaskInputChange}
                   className="textarea textarea-bordered w-full rounded-2xl"
-                  placeholder="Enter task description"
+                  placeholder="Enter description"
                   rows="4"
                 />
               </div>
@@ -767,6 +876,108 @@ function TaskManager({ selectedPersona }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showViewTaskModal && selectedTask && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Task Details</h2>
+              <button
+                className="btn btn-ghost btn-sm rounded-xl"
+                onClick={() => {
+                  setShowViewTaskModal(false);
+                  setSelectedTask(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm opacity-60">Title</p>
+                <p className="mt-1 text-lg font-semibold break-words">
+                  {selectedTask.title}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm opacity-60">Description</p>
+                <p className="mt-1 break-words whitespace-pre-wrap">
+                  {selectedTask.description || "No description"}
+                </p>
+              </div>
+
+              {isStudent && (
+                <div>
+                  <p className="text-sm opacity-60">Course</p>
+                  <p className="mt-1">{selectedTask.course || "Not set"}</p>
+                </div>
+              )}
+
+              {isWork && (
+                <div>
+                  <p className="text-sm opacity-60">Project</p>
+                  <p className="mt-1">{selectedTask.project || "Not set"}</p>
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-sm opacity-60">Due Date</p>
+                  <p className="mt-1">{formatDate(selectedTask.dueDate)}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm opacity-60">Priority</p>
+                  <p className="mt-1">
+                    {selectedTask.priority
+                      ? selectedTask.priority.charAt(0).toUpperCase() +
+                        selectedTask.priority.slice(1)
+                      : "Not set"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm opacity-60">Status</p>
+                  <p className="mt-1">{taskStatusLabel(selectedTask)}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-3 pt-2">
+                <button
+                  className="btn btn-outline rounded-2xl"
+                  onClick={() => {
+                    setShowViewTaskModal(false);
+                    openEditTaskModal(selectedTask);
+                  }}
+                >
+                  Edit
+                </button>
+
+                {!(
+                  selectedTask.status === "done" ||
+                  selectedTask.completed === true
+                ) && (
+                  <button
+                    className="btn btn-success rounded-2xl text-white"
+                    onClick={() => handleCompleteTask(selectedTask)}
+                  >
+                    Complete
+                  </button>
+                )}
+
+                <button
+                  className="btn btn-error rounded-2xl text-white"
+                  onClick={() => handleDeleteTask(selectedTask)}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
