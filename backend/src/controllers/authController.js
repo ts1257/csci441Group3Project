@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import User from "../models/User.js";
+import Persona from "../models/Persona.js";
 import { generateToken } from "../utils/generateToken.js";
 
 export async function registerUser(req, res, next) {
@@ -34,13 +35,42 @@ export async function registerUser(req, res, next) {
       password: hashedPassword,
     });
 
+    // Create default personas for new user
+    const defaultPersonas = [
+      {
+        user: user._id,
+        name: "Student",
+        description: "Student mode for managing courses and academic tasks",
+        color: "#3b82f6",
+      },
+      {
+        user: user._id,
+        name: "Work",
+        description: "Work mode for managing projects and professional tasks",
+        color: "#10b981",
+      },
+      {
+        user: user._id,
+        name: "Finance",
+        description: "Finance mode for managing budgets, records, and payments",
+        color: "#f59e0b",
+      },
+    ];
+
+    const createdPersonas = await Persona.insertMany(defaultPersonas);
+
     res.status(201).json({
       message: "User registered successfully",
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        personas: user.personas,
+        personas: createdPersonas.map((p) => ({
+          _id: p._id,
+          name: p.name,
+          description: p.description,
+          color: p.color,
+        })),
       },
       token: generateToken(user._id.toString()),
     });
@@ -76,13 +106,21 @@ export async function loginUser(req, res, next) {
       });
     }
 
+    // Fetch personas for this user
+    const personas = await Persona.find({ user: user._id });
+
     res.status(200).json({
       message: "Login successful",
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        personas: user.personas,
+        personas: personas.map((p) => ({
+          _id: p._id,
+          name: p.name,
+          description: p.description,
+          color: p.color,
+        })),
       },
       token: generateToken(user._id.toString()),
     });
@@ -101,8 +139,23 @@ export async function getMe(req, res, next) {
       });
     }
 
+    // Fetch personas for this user
+    const personas = await Persona.find({ user: user._id });
+
     res.status(200).json({
-      user,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        personas: personas.map((p) => ({
+          _id: p._id,
+          name: p.name,
+          description: p.description,
+          color: p.color,
+        })),
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
     });
   } catch (error) {
     next(error);

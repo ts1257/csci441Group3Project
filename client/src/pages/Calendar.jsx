@@ -128,14 +128,28 @@ function CalendarContent({
   isSameDate,
 }) {
   useEffect(() => {
-    const storedPayments = localStorage.getItem("plannedPayments");
+    const fetchPayments = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/planned-payments`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const list = Array.isArray(data)
+            ? data
+            : data.plannedPayments || data.data || [];
+          setPlannedPayments(list);
+        } else {
+          setPlannedPayments([]);
+        }
+      } catch {
+        setPlannedPayments([]);
+      }
+    };
 
-    try {
-      const parsedPayments = storedPayments ? JSON.parse(storedPayments) : [];
-      setPlannedPayments(Array.isArray(parsedPayments) ? parsedPayments : []);
-    } catch {
-      setPlannedPayments([]);
-    }
+    fetchPayments();
   }, [selectedPersonaName, setPlannedPayments]);
 
   useEffect(() => {
@@ -176,10 +190,7 @@ function CalendarContent({
               : [];
 
         const filteredTasks = taskList.filter((task) => {
-          const taskPersonaId =
-            typeof task.persona === "object" ? task.persona?._id : task.persona;
-
-          return taskPersonaId === selectedPersona;
+          return task.persona === selectedPersonaName?.toLowerCase().trim();
         });
 
         setTasks(filteredTasks);
@@ -235,7 +246,7 @@ function CalendarContent({
       }
 
       map.get(key).push({
-        id: payment.id,
+        id: payment._id,
         kind: "planned-payment",
         title: payment.title,
         description: payment.notes || "",
@@ -322,7 +333,6 @@ function CalendarContent({
   });
 
   const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const calendarLabel = isFinance ? "planned payments" : "tasks";
   const selectedDateLabel = isFinance ? "Planned payments" : "Tasks";
 
   const totalPlannedPayments = useMemo(

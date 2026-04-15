@@ -4,12 +4,15 @@ import DashboardLayout from "../components/dashboard/DashboardLayout";
 function PlannedPayments() {
   const [plannedPayments, setPlannedPayments] = useState([]);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
   const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
   const [showViewPaymentModal, setShowViewPaymentModal] = useState(false);
 
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [paymentForm, setPaymentForm] = useState({
     title: "",
@@ -20,19 +23,46 @@ function PlannedPayments() {
   });
 
   useEffect(() => {
-    const storedPayments = localStorage.getItem("plannedPayments");
-
-    try {
-      const parsedPayments = storedPayments ? JSON.parse(storedPayments) : [];
-      setPlannedPayments(Array.isArray(parsedPayments) ? parsedPayments : []);
-    } catch {
-      setPlannedPayments([]);
-    }
+    fetchPayments();
   }, []);
 
-  const persistPayments = (updatedPayments) => {
-    setPlannedPayments(updatedPayments);
-    localStorage.setItem("plannedPayments", JSON.stringify(updatedPayments));
+  const fetchPayments = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch payments");
+      }
+
+      const paymentList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.plannedPayments)
+          ? data.plannedPayments
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+
+      setPlannedPayments(paymentList);
+    } catch (err) {
+      setError(err.message || "Failed to load payments");
+      setPlannedPayments([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetPaymentForm = () => {
@@ -53,25 +83,54 @@ function PlannedPayments() {
     }));
   };
 
-  const handleAddPayment = (e) => {
+  const handleAddPayment = async (e) => {
     e.preventDefault();
 
     if (!paymentForm.title.trim()) return;
     if (!paymentForm.amount) return;
 
-    const newPayment = {
-      id: Date.now().toString(),
-      title: paymentForm.title.trim(),
-      amount: Number(paymentForm.amount) || 0,
-      dueDate: paymentForm.dueDate,
-      status: paymentForm.status,
-      notes: paymentForm.notes,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      setSubmitting(true);
+      setError("");
 
-    persistPayments([newPayment, ...plannedPayments]);
-    resetPaymentForm();
-    setShowAddPaymentModal(false);
+      const token = localStorage.getItem("token");
+
+      const payload = {
+        title: paymentForm.title.trim(),
+        amount: Number(paymentForm.amount) || 0,
+        dueDate: paymentForm.dueDate,
+        status: paymentForm.status,
+        notes: paymentForm.notes,
+      };
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to create payment");
+      }
+
+      const newPayment = data.plannedPayment || data.data || data;
+      setPlannedPayments((prev) => [newPayment, ...prev]);
+
+      resetPaymentForm();
+      setShowAddPaymentModal(false);
+    } catch (err) {
+      setError(err.message || "Failed to add payment");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openViewPaymentModal = (payment) => {
@@ -91,49 +150,97 @@ function PlannedPayments() {
     setShowEditPaymentModal(true);
   };
 
-  const handleEditPayment = (e) => {
+  const handleEditPayment = async (e) => {
     e.preventDefault();
 
     if (!selectedPayment || !paymentForm.title.trim()) return;
     if (!paymentForm.amount) return;
 
-    const updatedPayments = plannedPayments.map((payment) =>
-      payment.id === selectedPayment.id
-        ? {
-            ...payment,
-            title: paymentForm.title.trim(),
-            amount: Number(paymentForm.amount) || 0,
-            dueDate: paymentForm.dueDate,
-            status: paymentForm.status,
-            notes: paymentForm.notes,
-          }
-        : payment,
-    );
+    try {
+      setSubmitting(true);
+      setError("");
 
-    persistPayments(updatedPayments);
+      const token = localStorage.getItem("token");
 
-    const updatedSelectedPayment = updatedPayments.find(
-      (payment) => payment.id === selectedPayment.id,
-    );
-    setSelectedPayment(updatedSelectedPayment || null);
+      const payload = {
+        title: paymentForm.title.trim(),
+        amount: Number(paymentForm.amount) || 0,
+        dueDate: paymentForm.dueDate,
+        status: paymentForm.status,
+        notes: paymentForm.notes,
+      };
 
-    setShowEditPaymentModal(false);
-    resetPaymentForm();
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments/${selectedPayment._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update payment");
+      }
+
+      const updatedPayment = data.plannedPayment || data.data || data;
+
+      setPlannedPayments((prev) =>
+        prev.map((payment) =>
+          payment._id === selectedPayment._id ? updatedPayment : payment,
+        ),
+      );
+
+      setSelectedPayment(updatedPayment);
+      setShowEditPaymentModal(false);
+      resetPaymentForm();
+    } catch (err) {
+      setError(err.message || "Failed to update payment");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeletePayment = (paymentId) => {
+  const handleDeletePayment = async (paymentId) => {
     const confirmed = window.confirm("Delete this planned payment?");
     if (!confirmed) return;
 
-    const updatedPayments = plannedPayments.filter(
-      (payment) => payment.id !== paymentId,
-    );
-    persistPayments(updatedPayments);
+    try {
+      setError("");
 
-    if (selectedPayment?.id === paymentId) {
-      setSelectedPayment(null);
-      setShowViewPaymentModal(false);
-      setShowEditPaymentModal(false);
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments/${paymentId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to delete payment");
+      }
+
+      setPlannedPayments((prev) =>
+        prev.filter((payment) => payment._id !== paymentId),
+      );
+
+      if (selectedPayment?._id === paymentId) {
+        setSelectedPayment(null);
+        setShowViewPaymentModal(false);
+        setShowEditPaymentModal(false);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete payment");
     }
   };
 
@@ -228,7 +335,7 @@ function PlannedPayments() {
               <div className="space-y-4">
                 {filteredPayments.map((payment) => (
                   <div
-                    key={payment.id}
+                    key={payment._id}
                     className="rounded-3xl border border-base-300 p-5"
                   >
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -241,7 +348,7 @@ function PlannedPayments() {
                           Due: {payment.dueDate || "No due date"}
                         </p>
 
-                        <p className="mt-2 text-sm opacity-70 wrap-break-wordword whitespace-pre-wrap">
+                        <p className="mt-2 text-sm opacity-70 wrap-break-word whitespace-pre-wrap">
                           {payment.notes || "No notes"}
                         </p>
                       </div>
@@ -275,7 +382,7 @@ function PlannedPayments() {
 
                           <button
                             className="btn btn-error btn-sm rounded-xl text-white"
-                            onClick={() => handleDeletePayment(payment.id)}
+                            onClick={() => handleDeletePayment(payment._id)}
                           >
                             Delete
                           </button>
@@ -290,7 +397,7 @@ function PlannedPayments() {
 
           {showAddPaymentModal && (
             <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-lg rounded-4xlrder border-base-300 bg-base-100 p-6 shadow-xl">
+              <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Add Planned Payment</h2>
                   <button
@@ -588,7 +695,7 @@ function PlannedPayments() {
 
                     <button
                       className="btn btn-error rounded-2xl text-white"
-                      onClick={() => handleDeletePayment(selectedPayment.id)}
+                      onClick={() => handleDeletePayment(selectedPayment._id)}
                     >
                       Delete
                     </button>

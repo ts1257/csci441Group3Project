@@ -2,7 +2,9 @@ import Project from "../models/Project.js";
 
 export async function getProjects(req, res, next) {
   try {
-    const projects = await Project.find({ user: req.user.userId }).sort({ createdAt: -1 });
+    const projects = await Project.find({ user: req.user.userId }).sort({
+      createdAt: -1,
+    });
 
     res.status(200).json({
       projects,
@@ -14,7 +16,8 @@ export async function getProjects(req, res, next) {
 
 export async function createProject(req, res, next) {
   try {
-    const { name, description } = req.body;
+    const { name, client, budget, color, description, notes, status } =
+      req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -25,7 +28,12 @@ export async function createProject(req, res, next) {
     const project = await Project.create({
       user: req.user.userId,
       name: name.trim(),
+      client: client?.trim() || "",
+      budget: budget !== undefined ? Number(budget) : undefined,
+      color: color?.trim() || "",
       description: description?.trim() || "",
+      notes: notes?.trim() || "",
+      status: status || "active",
     });
 
     res.status(201).json({
@@ -40,7 +48,8 @@ export async function createProject(req, res, next) {
 export async function updateProject(req, res, next) {
   try {
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { name, client, budget, color, description, notes, status } =
+      req.body;
 
     const project = await Project.findOne({
       _id: id,
@@ -54,7 +63,12 @@ export async function updateProject(req, res, next) {
     }
 
     if (name !== undefined) project.name = name.trim();
+    if (client !== undefined) project.client = client.trim();
+    if (budget !== undefined) project.budget = Number(budget);
+    if (color !== undefined) project.color = color.trim();
     if (description !== undefined) project.description = description.trim();
+    if (notes !== undefined) project.notes = notes.trim();
+    if (status !== undefined) project.status = status;
 
     const updatedProject = await project.save();
 

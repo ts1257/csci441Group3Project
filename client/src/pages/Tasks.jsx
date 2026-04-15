@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import TaskManager from "../components/dashboard/TaskManager";
-import FinanceSection from "../components/dashboard/FinanceSection";
 
 function Tasks() {
   const [taskStats, setTaskStats] = useState({
@@ -14,27 +13,17 @@ function Tasks() {
     <DashboardLayout
       title="Tasks"
       subtitle="View and manage tasks for the active persona."
-      financeTitle="Finance"
-      financeSubtitle="Manage finance records and planned payments for Finance mode."
+      restrictTo="non-finance"
     >
-      {({
-        selectedPersona,
-        selectedPersonaName,
-        isFinance,
-        displayPersonaName,
-      }) =>
-        isFinance ? (
-          <FinanceSection />
-        ) : (
-          <TasksContent
-            selectedPersona={selectedPersona}
-            selectedPersonaName={selectedPersonaName}
-            displayPersonaName={displayPersonaName}
-            taskStats={taskStats}
-            setTaskStats={setTaskStats}
-          />
-        )
-      }
+      {({ selectedPersona, selectedPersonaName, displayPersonaName }) => (
+        <TasksContent
+          selectedPersona={selectedPersona}
+          selectedPersonaName={selectedPersonaName}
+          displayPersonaName={displayPersonaName}
+          taskStats={taskStats}
+          setTaskStats={setTaskStats}
+        />
+      )}
     </DashboardLayout>
   );
 }
@@ -90,10 +79,7 @@ function TasksContent({
               : [];
 
         const filteredTasks = taskList.filter((task) => {
-          const taskPersonaId =
-            typeof task.persona === "object" ? task.persona?._id : task.persona;
-
-          return taskPersonaId === selectedPersona;
+          return task.persona === selectedPersonaName?.toLowerCase().trim();
         });
 
         setTasks(filteredTasks);
@@ -115,7 +101,7 @@ function TasksContent({
   const stats = useMemo(() => {
     const total = tasks.length;
     const completed = tasks.filter(
-      (task) => task.status === "done" || task.completed === true,
+      (task) => task.status === "completed",
     ).length;
     const active = total - completed;
 

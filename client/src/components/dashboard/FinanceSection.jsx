@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 
-function FinanceSection() {
+function FinanceSection({ onDataChange }) {
   const [records, setRecords] = useState([]);
   const [plannedPayments, setPlannedPayments] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const [recordFilter, setRecordFilter] = useState("All");
+  const [paymentFilter, setPaymentFilter] = useState("All");
 
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -14,6 +19,7 @@ function FinanceSection() {
 
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [recordForm, setRecordForm] = useState({
     title: "",
@@ -34,43 +40,56 @@ function FinanceSection() {
   });
 
   useEffect(() => {
-    const storedRecords = localStorage.getItem("financeRecords");
-    const storedPayments = localStorage.getItem("plannedPayments");
-    const storedCategories = localStorage.getItem("financeCategories");
-
-    try {
-      const parsedRecords = storedRecords ? JSON.parse(storedRecords) : [];
-      const parsedPayments = storedPayments ? JSON.parse(storedPayments) : [];
-      const parsedCategories = storedCategories
-        ? JSON.parse(storedCategories)
-        : [];
-
-      setRecords(Array.isArray(parsedRecords) ? parsedRecords : []);
-      setPlannedPayments(Array.isArray(parsedPayments) ? parsedPayments : []);
-      setCategories(Array.isArray(parsedCategories) ? parsedCategories : []);
-    } catch {
-      setRecords([]);
-      setPlannedPayments([]);
-      setCategories([]);
-    }
+    fetchAllData();
   }, []);
 
-  const persistRecords = (updatedRecords) => {
-    setRecords(updatedRecords);
-    localStorage.setItem("financeRecords", JSON.stringify(updatedRecords));
-  };
+  const fetchAllData = async () => {
+    setLoading(true);
+    setError("");
 
-  const persistPayments = (updatedPayments) => {
-    setPlannedPayments(updatedPayments);
-    localStorage.setItem("plannedPayments", JSON.stringify(updatedPayments));
-  };
+    try {
+      const token = localStorage.getItem("token");
 
-  const persistCategories = (updatedCategories) => {
-    setCategories(updatedCategories);
-    localStorage.setItem(
-      "financeCategories",
-      JSON.stringify(updatedCategories),
-    );
+      const [recordsRes, paymentsRes, categoriesRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL}/api/records`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/planned-payments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/categories`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (recordsRes.ok) {
+        const recordsData = await recordsRes.json();
+        const recordsList = Array.isArray(recordsData)
+          ? recordsData
+          : recordsData.records || recordsData.data || [];
+        setRecords(recordsList);
+      }
+
+      if (paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        const paymentsList = Array.isArray(paymentsData)
+          ? paymentsData
+          : paymentsData.plannedPayments || paymentsData.data || [];
+        setPlannedPayments(paymentsList);
+      }
+
+      if (categoriesRes.ok) {
+        const categoriesData = await categoriesRes.json();
+        const categoriesList = Array.isArray(categoriesData)
+          ? categoriesData
+          : categoriesData.categories || categoriesData.data || [];
+        setCategories(categoriesList);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to load finance data");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetRecordForm = () => {
@@ -169,12 +188,13 @@ function FinanceSection() {
     ];
   }, [categories, selectedCategoryObject]);
 
-  const syncCategoryStorage = (categoryName, subcategoryName) => {
+  const syncCategoryStorage = async (categoryName, subcategoryName) => {
     const trimmedCategory = categoryName.trim();
     const trimmedSubcategory = subcategoryName.trim();
 
     if (!trimmedCategory) return;
 
+    const token = localStorage.getItem("token");
     const existingCategory = categories.find(
       (category) =>
         category.name?.toLowerCase().trim() === trimmedCategory.toLowerCase(),
@@ -190,78 +210,156 @@ function FinanceSection() {
 
       if (hasSubcategory) return;
 
-      const updatedCategories = categories.map((category) =>
-        category.id === existingCategory.id
-          ? {
-              ...category,
+      // Update category with new subcategory
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/categories/${existingCategory._id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: existingCategory.name,
               subcategories: [
-                ...(category.subcategories || []),
+                ...(existingCategory.subcategories || []),
                 trimmedSubcategory,
               ],
-            }
-          : category,
-      );
-
-      persistCategories(updatedCategories);
+            }),
+          },
+        );
+        if (response.ok) {
+          const updated = await response.json();
+          const updatedCategories = categories.map((c) =>
+            c._id === existingCategory._id ? updated.category || updated : c,
+          );
+          setCategories(updatedCategories);
+        }
+      } catch {
+        // silently ignore — category sync is best-effort
+      }
       return;
     }
 
-    const newCategory = {
-      id: Date.now().toString(),
-      name: trimmedCategory,
-      subcategories: trimmedSubcategory ? [trimmedSubcategory] : [],
-      createdAt: new Date().toISOString(),
-    };
-
-    persistCategories([newCategory, ...categories]);
+    // Create new category
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/categories`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: trimmedCategory,
+            subcategories: trimmedSubcategory ? [trimmedSubcategory] : [],
+          }),
+        },
+      );
+      if (response.ok) {
+        const newCat = await response.json();
+        setCategories([newCat.category || newCat, ...categories]);
+      }
+    } catch {
+      // silently ignore — category sync is best-effort
+    }
   };
 
-  const handleAddRecord = (e) => {
+  const handleAddRecord = async (e) => {
     e.preventDefault();
 
     if (!recordForm.title.trim()) return;
     if (!recordForm.amount) return;
 
-    syncCategoryStorage(recordForm.category, recordForm.subcategory);
+    try {
+      setSubmitting(true);
+      setError("");
+      const token = localStorage.getItem("token");
 
-    const newRecord = {
-      id: Date.now().toString(),
-      title: recordForm.title.trim(),
-      type: recordForm.type,
-      amount: Number(recordForm.amount) || 0,
-      category: recordForm.category.trim(),
-      subcategory: recordForm.subcategory.trim(),
-      date: recordForm.date,
-      notes: recordForm.notes,
-    };
+      // Sync category first if there's one
+      if (recordForm.category.trim()) {
+        await syncCategoryStorage(recordForm.category, recordForm.subcategory);
+      }
 
-    const updatedRecords = [newRecord, ...records];
-    persistRecords(updatedRecords);
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/records`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: recordForm.title.trim(),
+            type: recordForm.type,
+            amount: Number(recordForm.amount) || 0,
+            category: recordForm.category.trim(),
+            subcategory: recordForm.subcategory.trim(),
+            date: recordForm.date,
+            notes: recordForm.notes,
+          }),
+        },
+      );
 
-    resetRecordForm();
-    setShowRecordModal(false);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      const newRecord = data.record || data;
+      setRecords([newRecord, ...records]);
+      onDataChange?.({ records: [newRecord, ...records] });
+      resetRecordForm();
+      setShowRecordModal(false);
+    } catch (err) {
+      setError(err.message || "Failed to add record");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleAddPayment = (e) => {
+  const handleAddPayment = async (e) => {
     e.preventDefault();
 
     if (!paymentForm.title.trim()) return;
     if (!paymentForm.amount) return;
 
-    const newPayment = {
-      id: Date.now().toString(),
-      title: paymentForm.title.trim(),
-      amount: Number(paymentForm.amount) || 0,
-      dueDate: paymentForm.dueDate,
-      status: paymentForm.status,
-      notes: paymentForm.notes,
-    };
+    try {
+      setSubmitting(true);
+      setError("");
+      const token = localStorage.getItem("token");
 
-    const updatedPayments = [newPayment, ...plannedPayments];
-    persistPayments(updatedPayments);
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: paymentForm.title.trim(),
+            amount: Number(paymentForm.amount) || 0,
+            dueDate: paymentForm.dueDate,
+            status: paymentForm.status,
+            notes: paymentForm.notes,
+          }),
+        },
+      );
 
-    resetPaymentForm();
-    setShowPaymentModal(false);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      const newPayment = data.plannedPayment || data;
+      setPlannedPayments([newPayment, ...plannedPayments]);
+      onDataChange?.({ payments: [newPayment, ...plannedPayments] });
+      resetPaymentForm();
+      setShowPaymentModal(false);
+    } catch (err) {
+      setError(err.message || "Failed to add payment");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openViewRecordModal = (record) => {
@@ -283,19 +381,32 @@ function FinanceSection() {
     setShowEditRecordModal(true);
   };
 
-  const handleEditRecord = (e) => {
+  const handleEditRecord = async (e) => {
     e.preventDefault();
 
     if (!selectedRecord) return;
     if (!recordForm.title.trim()) return;
     if (!recordForm.amount) return;
 
-    syncCategoryStorage(recordForm.category, recordForm.subcategory);
+    try {
+      setSubmitting(true);
+      setError("");
+      const token = localStorage.getItem("token");
 
-    const updatedRecords = records.map((record) =>
-      record.id === selectedRecord.id
-        ? {
-            ...record,
+      // Sync category first if there's one
+      if (recordForm.category.trim()) {
+        await syncCategoryStorage(recordForm.category, recordForm.subcategory);
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/records/${selectedRecord._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
             title: recordForm.title.trim(),
             type: recordForm.type,
             amount: Number(recordForm.amount) || 0,
@@ -303,31 +414,60 @@ function FinanceSection() {
             subcategory: recordForm.subcategory.trim(),
             date: recordForm.date,
             notes: recordForm.notes,
-          }
-        : record,
-    );
+          }),
+        },
+      );
 
-    persistRecords(updatedRecords);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
 
-    const updatedSelected = updatedRecords.find(
-      (record) => record.id === selectedRecord.id,
-    );
-    setSelectedRecord(updatedSelected || null);
-    setShowEditRecordModal(false);
-    resetRecordForm();
+      const updatedRecord = data.record || data;
+      const updatedRecords = records.map((r) =>
+        r._id === selectedRecord._id ? updatedRecord : r,
+      );
+      setRecords(updatedRecords);
+      onDataChange?.({ records: updatedRecords });
+      setSelectedRecord(updatedRecord);
+      setShowEditRecordModal(false);
+      resetRecordForm();
+    } catch (err) {
+      setError(err.message || "Failed to edit record");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteRecord = (recordId) => {
+  const handleDeleteRecord = async (recordId) => {
     const confirmed = window.confirm("Delete this record?");
     if (!confirmed) return;
 
-    const updatedRecords = records.filter((record) => record.id !== recordId);
-    persistRecords(updatedRecords);
+    try {
+      setError("");
+      const token = localStorage.getItem("token");
 
-    if (selectedRecord?.id === recordId) {
-      setSelectedRecord(null);
-      setShowViewRecordModal(false);
-      setShowEditRecordModal(false);
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/records/${recordId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message);
+      }
+
+      setRecords(records.filter((r) => r._id !== recordId));
+      onDataChange?.({ records: records.filter((r) => r._id !== recordId) });
+
+      if (selectedRecord?._id === recordId) {
+        setSelectedRecord(null);
+        setShowViewRecordModal(false);
+        setShowEditRecordModal(false);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete record");
     }
   };
 
@@ -341,56 +481,95 @@ function FinanceSection() {
     setPaymentForm({
       title: payment.title || "",
       amount: payment.amount || "",
-      dueDate: payment.dueDate || "",
+      dueDate: payment.dueDate ? payment.dueDate.split("T")[0] : "",
       status: payment.status || "pending",
       notes: payment.notes || "",
     });
     setShowEditPaymentModal(true);
   };
 
-  const handleEditPayment = (e) => {
+  const handleEditPayment = async (e) => {
     e.preventDefault();
 
     if (!selectedPayment) return;
     if (!paymentForm.title.trim()) return;
     if (!paymentForm.amount) return;
 
-    const updatedPayments = plannedPayments.map((payment) =>
-      payment.id === selectedPayment.id
-        ? {
-            ...payment,
+    try {
+      setSubmitting(true);
+      setError("");
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments/${selectedPayment._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
             title: paymentForm.title.trim(),
             amount: Number(paymentForm.amount) || 0,
             dueDate: paymentForm.dueDate,
             status: paymentForm.status,
             notes: paymentForm.notes,
-          }
-        : payment,
-    );
+          }),
+        },
+      );
 
-    persistPayments(updatedPayments);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
 
-    const updatedSelected = updatedPayments.find(
-      (payment) => payment.id === selectedPayment.id,
-    );
-    setSelectedPayment(updatedSelected || null);
-    setShowEditPaymentModal(false);
-    resetPaymentForm();
+      const updatedPayment = data.plannedPayment || data;
+      const updatedPayments = plannedPayments.map((p) =>
+        p._id === selectedPayment._id ? updatedPayment : p,
+      );
+      setPlannedPayments(updatedPayments);
+      onDataChange?.({ payments: updatedPayments });
+      setSelectedPayment(updatedPayment);
+      setShowEditPaymentModal(false);
+      resetPaymentForm();
+    } catch (err) {
+      setError(err.message || "Failed to edit payment");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeletePayment = (paymentId) => {
+  const handleDeletePayment = async (paymentId) => {
     const confirmed = window.confirm("Delete this planned payment?");
     if (!confirmed) return;
 
-    const updatedPayments = plannedPayments.filter(
-      (payment) => payment.id !== paymentId,
-    );
-    persistPayments(updatedPayments);
+    try {
+      setError("");
+      const token = localStorage.getItem("token");
 
-    if (selectedPayment?.id === paymentId) {
-      setSelectedPayment(null);
-      setShowViewPaymentModal(false);
-      setShowEditPaymentModal(false);
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments/${paymentId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message);
+      }
+
+      setPlannedPayments(plannedPayments.filter((p) => p._id !== paymentId));
+      onDataChange?.({
+        payments: plannedPayments.filter((p) => p._id !== paymentId),
+      });
+
+      if (selectedPayment?._id === paymentId) {
+        setSelectedPayment(null);
+        setShowViewPaymentModal(false);
+        setShowEditPaymentModal(false);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete payment");
     }
   };
 
@@ -404,26 +583,110 @@ function FinanceSection() {
     return "badge-warning";
   };
 
+  const formatDueDate = (dateString) => {
+    if (!dateString) return "No due date";
+    const part = dateString.includes("T")
+      ? dateString.split("T")[0]
+      : dateString;
+    const [y, m, d] = part.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString();
+  };
+
+  const recordFilters = ["All", "Income", "Expense"];
+  const paymentFilters = ["All", "Pending", "Paid"];
+
+  const filteredRecords = useMemo(() => {
+    if (recordFilter === "All") return records;
+    return records.filter(
+      (r) => r.type?.toLowerCase() === recordFilter.toLowerCase(),
+    );
+  }, [records, recordFilter]);
+
+  const filteredPayments = useMemo(() => {
+    if (paymentFilter === "All") return plannedPayments;
+    return plannedPayments.filter(
+      (p) => p.status?.toLowerCase() === paymentFilter.toLowerCase(),
+    );
+  }, [plannedPayments, paymentFilter]);
+
+  const handleCompletePayment = async (payment) => {
+    if (payment.status === "paid") return;
+
+    try {
+      setError("");
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments/${payment._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ ...payment, status: "paid" }),
+        },
+      );
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      const updatedPayment = data.plannedPayment || data;
+      const updatedPayments = plannedPayments.map((p) =>
+        p._id === payment._id ? updatedPayment : p,
+      );
+      setPlannedPayments(updatedPayments);
+      onDataChange?.({ payments: updatedPayments });
+
+      if (selectedPayment?._id === payment._id) {
+        setSelectedPayment(updatedPayment);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to mark payment as paid");
+    }
+  };
+
   return (
     <>
-      <section className="mb-6 rounded-4xlrder border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
-        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="mb-6 rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-2xl font-bold md:text-3xl">Records</h2>
-          <button
-            className="btn btn-primary rounded-2xl"
-            onClick={() => setShowRecordModal(true)}
-          >
-            Add Record
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap gap-2">
+              {recordFilters.map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setRecordFilter(filter)}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    recordFilter === filter
+                      ? "bg-primary text-primary-content"
+                      : "bg-base-200 hover:bg-base-300"
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+            <button
+              className="btn btn-primary rounded-2xl"
+              onClick={() => setShowRecordModal(true)}
+            >
+              Add Record
+            </button>
+          </div>
         </div>
 
-        {records.length === 0 ? (
-          <p className="opacity-70">No finance records added yet.</p>
+        {filteredRecords.length === 0 ? (
+          <p className="opacity-70">
+            {recordFilter === "All"
+              ? "No finance records added yet."
+              : `No ${recordFilter.toLowerCase()} records found.`}
+          </p>
         ) : (
           <div className="space-y-4">
-            {records.map((record) => (
+            {filteredRecords.map((record) => (
               <div
-                key={record.id}
+                key={record._id}
                 className="rounded-3xl border border-base-300 p-5"
               >
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -438,7 +701,7 @@ function FinanceSection() {
                     <p className="mt-1 text-sm opacity-60">
                       {record.date || "No date"}
                     </p>
-                    <p className="mt-2 text-sm opacity-70 wrap-break-wordword whitespace-pre-wrap">
+                    <p className="mt-2 text-sm opacity-70 wrap-break-word whitespace-pre-wrap">
                       {record.notes || "No notes"}
                     </p>
                   </div>
@@ -472,7 +735,7 @@ function FinanceSection() {
 
                       <button
                         className="btn btn-error btn-sm rounded-xl text-white"
-                        onClick={() => handleDeleteRecord(record.id)}
+                        onClick={() => handleDeleteRecord(record._id)}
                       >
                         Delete
                       </button>
@@ -486,32 +749,53 @@ function FinanceSection() {
       </section>
 
       <section className="rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
-        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-2xl font-bold md:text-3xl">Planned Payments</h2>
-          <button
-            className="btn btn-primary rounded-2xl"
-            onClick={() => setShowPaymentModal(true)}
-          >
-            Add Planned Payment
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap gap-2">
+              {paymentFilters.map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setPaymentFilter(filter)}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    paymentFilter === filter
+                      ? "bg-primary text-primary-content"
+                      : "bg-base-200 hover:bg-base-300"
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+            <button
+              className="btn btn-primary rounded-2xl"
+              onClick={() => setShowPaymentModal(true)}
+            >
+              Add Planned Payment
+            </button>
+          </div>
         </div>
 
-        {plannedPayments.length === 0 ? (
-          <p className="opacity-70">No planned payments added yet.</p>
+        {filteredPayments.length === 0 ? (
+          <p className="opacity-70">
+            {paymentFilter === "All"
+              ? "No planned payments added yet."
+              : `No ${paymentFilter.toLowerCase()} payments found.`}
+          </p>
         ) : (
           <div className="space-y-4">
-            {plannedPayments.map((payment) => (
+            {filteredPayments.map((payment) => (
               <div
-                key={payment.id}
+                key={payment._id}
                 className="rounded-3xl border border-base-300 p-5"
               >
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
-                    <h3 className="text-lg font-semibold wrap-break-wordword">
+                    <h3 className="text-lg font-semibold wrap-break-word">
                       {payment.title}
                     </h3>
                     <p className="mt-1 text-sm opacity-60">
-                      Due: {payment.dueDate || "No due date"}
+                      Due: {formatDueDate(payment.dueDate)}
                     </p>
                     <p className="mt-2 text-sm opacity-70 wrap-break-word whitespace-pre-wrap">
                       {payment.notes || "No notes"}
@@ -545,9 +829,18 @@ function FinanceSection() {
                         Edit
                       </button>
 
+                      {payment.status !== "paid" && (
+                        <button
+                          className="btn btn-success btn-sm rounded-xl text-white"
+                          onClick={() => handleCompletePayment(payment)}
+                        >
+                          Complete
+                        </button>
+                      )}
+
                       <button
                         className="btn btn-error btn-sm rounded-xl text-white"
-                        onClick={() => handleDeletePayment(payment.id)}
+                        onClick={() => handleDeletePayment(payment._id)}
                       >
                         Delete
                       </button>
@@ -561,7 +854,7 @@ function FinanceSection() {
       </section>
 
       {showRecordModal && (
-        <div className="fixed inset-0 z-60lex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-2xl font-bold">Add Record</h2>
@@ -636,8 +929,11 @@ function FinanceSection() {
                   placeholder="Choose or type category"
                 />
                 <datalist id="finance-category-suggestions-dashboard">
-                  {categorySuggestions.map((categoryName) => (
-                    <option key={categoryName} value={categoryName} />
+                  {categorySuggestions.map((categoryName, index) => (
+                    <option
+                      key={`${categoryName}-${index}`}
+                      value={categoryName}
+                    />
                   ))}
                 </datalist>
               </div>
@@ -656,8 +952,11 @@ function FinanceSection() {
                   placeholder="Choose or type subcategory"
                 />
                 <datalist id="finance-subcategory-suggestions-dashboard">
-                  {subcategorySuggestions.map((subcategory) => (
-                    <option key={subcategory} value={subcategory} />
+                  {subcategorySuggestions.map((subcategory, index) => (
+                    <option
+                      key={`${subcategory}-${index}`}
+                      value={subcategory}
+                    />
                   ))}
                 </datalist>
               </div>
@@ -706,7 +1005,7 @@ function FinanceSection() {
       )}
 
       {showEditRecordModal && selectedRecord && (
-        <div className="fixed inset-0 z-60lex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-2xl font-bold">Edit Record</h2>
@@ -780,8 +1079,11 @@ function FinanceSection() {
                   placeholder="Choose or type category"
                 />
                 <datalist id="finance-category-suggestions-dashboard-edit">
-                  {categorySuggestions.map((categoryName) => (
-                    <option key={categoryName} value={categoryName} />
+                  {categorySuggestions.map((categoryName, index) => (
+                    <option
+                      key={`${categoryName}-${index}`}
+                      value={categoryName}
+                    />
                   ))}
                 </datalist>
               </div>
@@ -800,8 +1102,11 @@ function FinanceSection() {
                   placeholder="Choose or type subcategory"
                 />
                 <datalist id="finance-subcategory-suggestions-dashboard-edit">
-                  {subcategorySuggestions.map((subcategory) => (
-                    <option key={subcategory} value={subcategory} />
+                  {subcategorySuggestions.map((subcategory, index) => (
+                    <option
+                      key={`${subcategory}-${index}`}
+                      value={subcategory}
+                    />
                   ))}
                 </datalist>
               </div>
@@ -851,7 +1156,7 @@ function FinanceSection() {
 
       {showViewRecordModal && selectedRecord && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-lg rounded-4xlrder border-base-300 bg-base-100 p-6 shadow-xl">
+          <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-2xl font-bold">Record Details</h2>
               <button
@@ -904,7 +1209,7 @@ function FinanceSection() {
 
               <div>
                 <p className="text-sm opacity-60">Notes</p>
-                <p className="mt-1 wrap-break-wordword whitespace-pre-wrap">
+                <p className="mt-1 wrap-break-word whitespace-pre-wrap">
                   {selectedRecord.notes || "No notes"}
                 </p>
               </div>
@@ -922,7 +1227,7 @@ function FinanceSection() {
 
                 <button
                   className="btn btn-error rounded-2xl text-white"
-                  onClick={() => handleDeleteRecord(selectedRecord.id)}
+                  onClick={() => handleDeleteRecord(selectedRecord._id)}
                 >
                   Delete
                 </button>
@@ -934,7 +1239,7 @@ function FinanceSection() {
 
       {showPaymentModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-lg rounded-4xlrder border-base-300 bg-base-100 p-6 shadow-xl">
+          <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-2xl font-bold">Add Planned Payment</h2>
               <button
@@ -1043,7 +1348,7 @@ function FinanceSection() {
 
       {showEditPaymentModal && selectedPayment && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-lg rounded-4xlrder border-base-300 bg-base-100 p-6 shadow-xl">
+          <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-2xl font-bold">Edit Planned Payment</h2>
               <button
@@ -1151,7 +1456,7 @@ function FinanceSection() {
 
       {showViewPaymentModal && selectedPayment && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-lg rounded-4xlrder border-base-300 bg-base-100 p-6 shadow-xl">
+          <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-2xl font-bold">Planned Payment Details</h2>
               <button
@@ -1189,9 +1494,7 @@ function FinanceSection() {
 
               <div>
                 <p className="text-sm opacity-60">Due Date</p>
-                <p className="mt-1">
-                  {selectedPayment.dueDate || "No due date"}
-                </p>
+                <p className="mt-1">{formatDueDate(selectedPayment.dueDate)}</p>
               </div>
 
               <div>
@@ -1212,9 +1515,21 @@ function FinanceSection() {
                   Edit
                 </button>
 
+                {selectedPayment.status !== "paid" && (
+                  <button
+                    className="btn btn-success rounded-2xl text-white"
+                    onClick={() => {
+                      handleCompletePayment(selectedPayment);
+                      setShowViewPaymentModal(false);
+                    }}
+                  >
+                    Complete
+                  </button>
+                )}
+
                 <button
                   className="btn btn-error rounded-2xl text-white"
-                  onClick={() => handleDeletePayment(selectedPayment.id)}
+                  onClick={() => handleDeletePayment(selectedPayment._id)}
                 >
                   Delete
                 </button>

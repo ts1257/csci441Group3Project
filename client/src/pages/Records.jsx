@@ -5,12 +5,15 @@ function Records() {
   const [records, setRecords] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [showAddRecordModal, setShowAddRecordModal] = useState(false);
   const [showEditRecordModal, setShowEditRecordModal] = useState(false);
   const [showViewRecordModal, setShowViewRecordModal] = useState(false);
 
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [recordForm, setRecordForm] = useState({
     title: "",
@@ -23,37 +26,80 @@ function Records() {
   });
 
   useEffect(() => {
-    const storedRecords = localStorage.getItem("financeRecords");
-    const storedCategories = localStorage.getItem("financeCategories");
-
-    try {
-      const parsedRecords = storedRecords ? JSON.parse(storedRecords) : [];
-      setRecords(Array.isArray(parsedRecords) ? parsedRecords : []);
-    } catch {
-      setRecords([]);
-    }
-
-    try {
-      const parsedCategories = storedCategories
-        ? JSON.parse(storedCategories)
-        : [];
-      setCategories(Array.isArray(parsedCategories) ? parsedCategories : []);
-    } catch {
-      setCategories([]);
-    }
+    fetchRecords();
+    fetchCategories();
   }, []);
 
-  const persistRecords = (updatedRecords) => {
-    setRecords(updatedRecords);
-    localStorage.setItem("financeRecords", JSON.stringify(updatedRecords));
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/records`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch records");
+      }
+
+      const recordList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.records)
+          ? data.records
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+
+      setRecords(recordList);
+    } catch (err) {
+      setError(err.message || "Failed to load records");
+      setRecords([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const persistCategories = (updatedCategories) => {
-    setCategories(updatedCategories);
-    localStorage.setItem(
-      "financeCategories",
-      JSON.stringify(updatedCategories),
-    );
+  const fetchCategories = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/categories`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch categories");
+      }
+
+      const categoryList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.categories)
+          ? data.categories
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+
+      setCategories(categoryList);
+    } catch (err) {
+      setCategories([]);
+    }
   };
 
   const resetRecordForm = () => {
@@ -134,76 +180,95 @@ function Records() {
     ];
   }, [categories, selectedCategoryObject]);
 
-  const syncCategoryStorage = (categoryName, subcategoryName) => {
-    const trimmedCategory = categoryName.trim();
-    const trimmedSubcategory = subcategoryName.trim();
-
-    if (!trimmedCategory) return;
-
-    const existingCategory = categories.find(
-      (category) =>
-        category.name?.toLowerCase().trim() === trimmedCategory.toLowerCase(),
-    );
-
-    if (existingCategory) {
-      if (!trimmedSubcategory) return;
-
-      const hasSubcategory = (existingCategory.subcategories || []).some(
-        (subcategory) =>
-          subcategory.toLowerCase().trim() === trimmedSubcategory.toLowerCase(),
-      );
-
-      if (hasSubcategory) return;
-
-      const updatedCategories = categories.map((category) =>
-        category.id === existingCategory.id
-          ? {
-              ...category,
-              subcategories: [
-                ...(category.subcategories || []),
-                trimmedSubcategory,
-              ],
-            }
-          : category,
-      );
-
-      persistCategories(updatedCategories);
-      return;
-    }
-
-    const newCategory = {
-      id: Date.now().toString(),
-      name: trimmedCategory,
-      subcategories: trimmedSubcategory ? [trimmedSubcategory] : [],
-      createdAt: new Date().toISOString(),
-    };
-
-    persistCategories([newCategory, ...categories]);
-  };
-
-  const handleAddRecord = (e) => {
+  const handleAddRecord = async (e) => {
     e.preventDefault();
 
     if (!recordForm.title.trim()) return;
     if (!recordForm.amount) return;
 
-    syncCategoryStorage(recordForm.category, recordForm.subcategory);
+    try {
+      setSubmitting(true);
+      setError("");
 
-    const newRecord = {
-      id: Date.now().toString(),
-      title: recordForm.title.trim(),
-      type: recordForm.type,
-      amount: Number(recordForm.amount) || 0,
-      category: recordForm.category.trim(),
-      subcategory: recordForm.subcategory.trim(),
-      date: recordForm.date,
-      notes: recordForm.notes,
-      createdAt: new Date().toISOString(),
-    };
+      // Sync category if needed
+      if (recordForm.category.trim()) {
+        const categoryExists = categories.some(
+          (cat) =>
+            cat.name?.toLowerCase().trim() ===
+            recordForm.category.trim().toLowerCase(),
+        );
 
-    persistRecords([newRecord, ...records]);
-    resetRecordForm();
-    setShowAddRecordModal(false);
+        if (!categoryExists) {
+          const token = localStorage.getItem("token");
+          const categoryPayload = {
+            name: recordForm.category.trim(),
+            subcategories: recordForm.subcategory
+              ? [recordForm.subcategory.trim()]
+              : [],
+          };
+
+          const categoryResponse = await fetch(
+            `${import.meta.env.VITE_API_URL}/api/categories`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(categoryPayload),
+            },
+          );
+
+          if (categoryResponse.ok) {
+            const newCat = await categoryResponse.json();
+            setCategories((prev) => [
+              newCat.category || newCat.data || newCat,
+              ...prev,
+            ]);
+          }
+        }
+      }
+
+      const token = localStorage.getItem("token");
+
+      const payload = {
+        title: recordForm.title.trim(),
+        type: recordForm.type,
+        amount: Number(recordForm.amount) || 0,
+        category: recordForm.category.trim(),
+        subcategory: recordForm.subcategory.trim(),
+        date: recordForm.date,
+        notes: recordForm.notes,
+      };
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/records`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to create record");
+      }
+
+      const newRecord = data.record || data.data || data;
+      setRecords((prev) => [newRecord, ...prev]);
+
+      resetRecordForm();
+      setShowAddRecordModal(false);
+    } catch (err) {
+      setError(err.message || "Failed to add record");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openViewRecordModal = (record) => {
@@ -225,51 +290,97 @@ function Records() {
     setShowEditRecordModal(true);
   };
 
-  const handleEditRecord = (e) => {
+  const handleEditRecord = async (e) => {
     e.preventDefault();
 
     if (!selectedRecord || !recordForm.title.trim()) return;
     if (!recordForm.amount) return;
 
-    syncCategoryStorage(recordForm.category, recordForm.subcategory);
+    try {
+      setSubmitting(true);
+      setError("");
 
-    const updatedRecords = records.map((record) =>
-      record.id === selectedRecord.id
-        ? {
-            ...record,
-            title: recordForm.title.trim(),
-            type: recordForm.type,
-            amount: Number(recordForm.amount) || 0,
-            category: recordForm.category.trim(),
-            subcategory: recordForm.subcategory.trim(),
-            date: recordForm.date,
-            notes: recordForm.notes,
-          }
-        : record,
-    );
+      const token = localStorage.getItem("token");
 
-    persistRecords(updatedRecords);
+      const payload = {
+        title: recordForm.title.trim(),
+        type: recordForm.type,
+        amount: Number(recordForm.amount) || 0,
+        category: recordForm.category.trim(),
+        subcategory: recordForm.subcategory.trim(),
+        date: recordForm.date,
+        notes: recordForm.notes,
+      };
 
-    const updatedSelectedRecord = updatedRecords.find(
-      (record) => record.id === selectedRecord.id,
-    );
-    setSelectedRecord(updatedSelectedRecord || null);
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/records/${selectedRecord._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
 
-    setShowEditRecordModal(false);
-    resetRecordForm();
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update record");
+      }
+
+      const updatedRecord = data.record || data.data || data;
+
+      setRecords((prev) =>
+        prev.map((record) =>
+          record._id === selectedRecord._id ? updatedRecord : record,
+        ),
+      );
+
+      setSelectedRecord(updatedRecord);
+      setShowEditRecordModal(false);
+      resetRecordForm();
+    } catch (err) {
+      setError(err.message || "Failed to update record");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteRecord = (recordId) => {
+  const handleDeleteRecord = async (recordId) => {
     const confirmed = window.confirm("Delete this record?");
     if (!confirmed) return;
 
-    const updatedRecords = records.filter((record) => record.id !== recordId);
-    persistRecords(updatedRecords);
+    try {
+      setError("");
 
-    if (selectedRecord?.id === recordId) {
-      setSelectedRecord(null);
-      setShowViewRecordModal(false);
-      setShowEditRecordModal(false);
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/records/${recordId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to delete record");
+      }
+
+      setRecords((prev) => prev.filter((record) => record._id !== recordId));
+
+      if (selectedRecord?._id === recordId) {
+        setSelectedRecord(null);
+        setShowViewRecordModal(false);
+        setShowEditRecordModal(false);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete record");
     }
   };
 
@@ -363,7 +474,7 @@ function Records() {
               <div className="space-y-4">
                 {filteredRecords.map((record) => (
                   <div
-                    key={record.id}
+                    key={record._id}
                     className="rounded-3xl border border-base-300 p-5"
                   >
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -415,7 +526,7 @@ function Records() {
 
                           <button
                             className="btn btn-error btn-sm rounded-xl text-white"
-                            onClick={() => handleDeleteRecord(record.id)}
+                            onClick={() => handleDeleteRecord(record._id)}
                           >
                             Delete
                           </button>
@@ -812,7 +923,7 @@ function Records() {
 
                     <button
                       className="btn btn-error rounded-2xl text-white"
-                      onClick={() => handleDeleteRecord(selectedRecord.id)}
+                      onClick={() => handleDeleteRecord(selectedRecord._id)}
                     >
                       Delete
                     </button>

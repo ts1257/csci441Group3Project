@@ -8,6 +8,8 @@ function Dashboard() {
     <DashboardLayout
       title="Dashboard"
       subtitle="View your overview for the active persona."
+      studentSubtitle="Track your tasks, courses, and upcoming deadlines for Student mode."
+      workSubtitle="Track your tasks, projects, and work deadlines for Work mode."
       financeTitle="Finance Dashboard"
       financeSubtitle="Track balance and pending payments for Finance mode."
     >
@@ -75,10 +77,7 @@ function StandardDashboardContent({
               : [];
 
         const filteredTasks = taskList.filter((task) => {
-          const taskPersonaId =
-            typeof task.persona === "object" ? task.persona?._id : task.persona;
-
-          return taskPersonaId === selectedPersona;
+          return task.persona === selectedPersonaName?.toLowerCase().trim();
         });
 
         setTasks(filteredTasks);
@@ -114,7 +113,7 @@ function StandardDashboardContent({
     tasks.forEach((task) => {
       if (!task.dueDate) return;
 
-      const isCompleted = task.status === "done" || task.completed === true;
+      const isCompleted = task.status === "completed";
       if (isCompleted) return;
 
       const taskDate = parseLocalDate(task.dueDate);
@@ -165,6 +164,7 @@ function StandardDashboardContent({
         selectedPersona={selectedPersona}
         selectedPersonaName={selectedPersonaName}
         key={displayPersonaName}
+        onTasksChange={(newTasks) => setTasks(newTasks)}
       />
     </>
   );
@@ -174,35 +174,41 @@ function FinanceDashboardContent() {
   const [records, setRecords] = useState([]);
   const [plannedPayments, setPlannedPayments] = useState([]);
 
-  const loadFinanceData = () => {
-    const storedRecords = localStorage.getItem("financeRecords");
-    const storedPayments = localStorage.getItem("plannedPayments");
-
+  const loadFinanceData = async () => {
     try {
-      const parsedRecords = storedRecords ? JSON.parse(storedRecords) : [];
-      const parsedPayments = storedPayments ? JSON.parse(storedPayments) : [];
+      const token = localStorage.getItem("token");
 
-      setRecords(Array.isArray(parsedRecords) ? parsedRecords : []);
-      setPlannedPayments(Array.isArray(parsedPayments) ? parsedPayments : []);
+      const [recordsRes, paymentsRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL}/api/records`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/planned-payments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (recordsRes.ok) {
+        const data = await recordsRes.json();
+        const list = Array.isArray(data)
+          ? data
+          : data.records || data.data || [];
+        setRecords(list);
+      }
+
+      if (paymentsRes.ok) {
+        const data = await paymentsRes.json();
+        const list = Array.isArray(data)
+          ? data
+          : data.plannedPayments || data.data || [];
+        setPlannedPayments(list);
+      }
     } catch {
-      setRecords([]);
-      setPlannedPayments([]);
+      // silently fail — stats will show $0
     }
   };
 
   useEffect(() => {
     loadFinanceData();
-  }, []);
-
-  useEffect(() => {
-    const handleFinanceUpdate = () => {
-      loadFinanceData();
-    };
-
-    window.addEventListener("financeDataUpdated", handleFinanceUpdate);
-    return () => {
-      window.removeEventListener("financeDataUpdated", handleFinanceUpdate);
-    };
   }, []);
 
   const financeStats = useMemo(() => {
@@ -225,8 +231,11 @@ function FinanceDashboardContent() {
       .filter((payment) => {
         if (payment.status === "paid") return false;
         if (!payment.dueDate) return false;
-        const dueDate = new Date(payment.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
+        const datePart = payment.dueDate.includes("T")
+          ? payment.dueDate.split("T")[0]
+          : payment.dueDate;
+        const [y, m, d] = datePart.split("-").map(Number);
+        const dueDate = new Date(y, m - 1, d);
         return dueDate < today;
       })
       .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
@@ -263,7 +272,12 @@ function FinanceDashboardContent() {
         </div>
       </div>
 
-      <FinanceSection />
+      <FinanceSection
+        onDataChange={({ records: newRecords, payments: newPayments }) => {
+          if (newRecords) setRecords(newRecords);
+          if (newPayments) setPlannedPayments(newPayments);
+        }}
+      />
     </>
   );
 }

@@ -9,6 +9,8 @@ function DashboardLayout({
   restrictTo = null,
   financeTitle = null,
   financeSubtitle = null,
+  studentSubtitle = null,
+  workSubtitle = null,
 }) {
   const navigate = useNavigate();
 
@@ -101,7 +103,14 @@ function DashboardLayout({
               ? data.data
               : [];
 
-        setPersonas(personaList);
+        // Sort personas: Student first, then Work, then Finance
+        const personaOrder = { Student: 0, Work: 1, Finance: 2 };
+        const sortedPersonas = personaList.sort(
+          (a, b) =>
+            (personaOrder[a.name] ?? 999) - (personaOrder[b.name] ?? 999),
+        );
+
+        setPersonas(sortedPersonas);
 
         const savedPersonaId = localStorage.getItem("activePersonaId");
         const savedPersonaName = localStorage.getItem("activePersonaName");
@@ -162,6 +171,8 @@ function DashboardLayout({
       allowed = normalizedPersona === "work";
     } else if (restrictTo === "finance") {
       allowed = isFinance;
+    } else if (restrictTo === "non-finance") {
+      allowed = !isFinance;
     }
 
     if (!allowed) {
@@ -183,9 +194,20 @@ function DashboardLayout({
     );
   };
 
-  const resolvedTitle = isFinance && financeTitle ? financeTitle : title;
+  const resolvedTitle =
+    isFinance && financeTitle
+      ? financeTitle
+      : displayPersonaName
+        ? `${displayPersonaName} ${title}`
+        : title;
   const resolvedSubtitle =
-    isFinance && financeSubtitle ? financeSubtitle : subtitle;
+    isFinance && financeSubtitle
+      ? financeSubtitle
+      : normalizedPersona === "student" && studentSubtitle
+        ? studentSubtitle
+        : normalizedPersona === "work" && workSubtitle
+          ? workSubtitle
+          : subtitle;
 
   const content =
     typeof children === "function"
@@ -279,7 +301,13 @@ function DashboardLayout({
                 )}
               </div>
 
-              <div className="badge badge-outline rounded-full px-4 py-3">
+              <div
+                className={`rounded-full border px-4 py-1 text-sm font-medium ${
+                  online
+                    ? "border-green-500 text-green-500"
+                    : "border-red-500 text-red-500"
+                }`}
+              >
                 {online ? "Online" : "Offline"}
               </div>
             </div>

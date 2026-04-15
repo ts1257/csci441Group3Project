@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-function TaskManager({ selectedPersona, selectedPersonaName }) {
+function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState("");
@@ -49,27 +49,37 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
   }, [selectedPersonaName]);
 
   useEffect(() => {
-    // Load courses for student mode
-    const storedCourses = localStorage.getItem("studentCourses");
-    try {
-      const parsedCourses = storedCourses ? JSON.parse(storedCourses) : [];
-      setCourses(
-        Array.isArray(parsedCourses) ? parsedCourses.map((c) => c.name) : [],
-      );
-    } catch {
-      setCourses([]);
-    }
+    const fetchCoursesAndProjects = async () => {
+      try {
+        const token = localStorage.getItem("token");
 
-    // Load projects for work mode
-    const storedProjects = localStorage.getItem("workProjects");
-    try {
-      const parsedProjects = storedProjects ? JSON.parse(storedProjects) : [];
-      setProjects(
-        Array.isArray(parsedProjects) ? parsedProjects.map((p) => p.name) : [],
-      );
-    } catch {
-      setProjects([]);
-    }
+        const [coursesRes, projectsRes] = await Promise.all([
+          fetch(`${import.meta.env.VITE_API_URL}/api/courses`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${import.meta.env.VITE_API_URL}/api/projects`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        if (coursesRes.ok) {
+          const data = await coursesRes.json();
+          const list = Array.isArray(data) ? data : data.courses || [];
+          setCourses(list.map((c) => c.name));
+        }
+
+        if (projectsRes.ok) {
+          const data = await projectsRes.json();
+          const list = Array.isArray(data) ? data : data.projects || [];
+          setProjects(list.map((p) => p.name));
+        }
+      } catch {
+        setCourses([]);
+        setProjects([]);
+      }
+    };
+
+    fetchCoursesAndProjects();
   }, []);
 
   const parseLocalDate = (dateString) => {
@@ -136,13 +146,11 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
               : [];
 
         const filteredTasks = taskList.filter((task) => {
-          const taskPersonaId =
-            typeof task.persona === "object" ? task.persona?._id : task.persona;
-
-          return taskPersonaId === selectedPersona;
+          return task.persona === normalizedPersona;
         });
 
         setTasks(filteredTasks);
+        onTasksChange?.(filteredTasks);
       } catch (err) {
         setTasksError(err.message || "Failed to load tasks");
         setTasks([]);
@@ -152,7 +160,7 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
     };
 
     fetchTasks();
-  }, [selectedPersona]);
+  }, [normalizedPersona]);
 
   const handleTaskInputChange = (e) => {
     const { name, value } = e.target;
@@ -177,16 +185,15 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
       dueDate: taskData.dueDate || null,
       priority: taskData.priority,
       status: taskData.status,
-      persona: selectedPersona,
-      completed: taskData.status === "done",
+      persona: normalizedPersona,
     };
 
     if (isStudent) {
-      basePayload.course = taskData.course || "";
+      basePayload.courseId = taskData.course || "";
     }
 
     if (isWork) {
-      basePayload.project = taskData.project || "";
+      basePayload.projectId = taskData.project || "";
     }
 
     return basePayload;
@@ -232,17 +239,16 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
 
       const createdTask = {
         ...(data.task || data.data || data),
-        course: payload.course || "",
-        project: payload.project || "",
+        courseId: payload.courseId || "",
+        projectId: payload.projectId || "",
       };
 
-      const createdTaskPersonaId =
-        typeof createdTask.persona === "object"
-          ? createdTask.persona?._id
-          : createdTask.persona;
-
-      if (createdTaskPersonaId === selectedPersona) {
-        setTasks((prev) => [createdTask, ...prev]);
+      if (createdTask.persona === normalizedPersona) {
+        setTasks((prev) => {
+          const next = [createdTask, ...prev];
+          onTasksChange?.(next);
+          return next;
+        });
       }
 
       setNewTask(getInitialTaskState());
@@ -269,8 +275,8 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
       dueDate: formatDateForInput(task.dueDate),
       priority: task.priority || "medium",
       status: task.status || "todo",
-      course: task.course || "",
-      project: task.project || "",
+      course: task.courseId || "",
+      project: task.projectId || "",
     });
     setShowEditTaskModal(true);
   };
@@ -293,7 +299,7 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/tasks/${editingTask._id}`,
         {
-          method: "PUT",
+          method: "PATCH",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
@@ -310,13 +316,17 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
 
       const updatedTask = {
         ...(data.task || data.data || data),
-        course: payload.course || "",
-        project: payload.project || "",
+        courseId: payload.courseId || "",
+        projectId: payload.projectId || "",
       };
 
-      setTasks((prev) =>
-        prev.map((item) => (item._id === editingTask._id ? updatedTask : item)),
-      );
+      setTasks((prev) => {
+        const next = prev.map((item) =>
+          item._id === editingTask._id ? updatedTask : item,
+        );
+        onTasksChange?.(next);
+        return next;
+      });
 
       if (selectedTask?._id === updatedTask._id) {
         setSelectedTask(updatedTask);
@@ -337,15 +347,14 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`,
         {
-          method: "PUT",
+          method: "PATCH",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             ...task,
-            status: "done",
-            completed: true,
+            status: "completed",
           }),
         },
       );
@@ -358,9 +367,13 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
 
       const updatedTask = data.task || data.data || data;
 
-      setTasks((prev) =>
-        prev.map((item) => (item._id === task._id ? updatedTask : item)),
-      );
+      setTasks((prev) => {
+        const next = prev.map((item) =>
+          item._id === task._id ? updatedTask : item,
+        );
+        onTasksChange?.(next);
+        return next;
+      });
 
       if (selectedTask?._id === updatedTask._id) {
         setSelectedTask(updatedTask);
@@ -393,7 +406,11 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
         throw new Error(data.message || "Failed to delete task");
       }
 
-      setTasks((prev) => prev.filter((item) => item._id !== task._id));
+      setTasks((prev) => {
+        const next = prev.filter((item) => item._id !== task._id);
+        onTasksChange?.(next);
+        return next;
+      });
 
       if (selectedTask?._id === task._id) {
         setSelectedTask(null);
@@ -420,7 +437,7 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
     return tasks
       .filter((task) => {
         const taskDate = task.dueDate ? parseLocalDate(task.dueDate) : null;
-        const isCompleted = task.status === "done" || task.completed === true;
+        const isCompleted = task.status === "completed";
 
         if (activeTab === "Completed") {
           return isCompleted;
@@ -469,12 +486,14 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
   }, [tasks, activeTab]);
 
   const renderPersonaMeta = (task) => {
-    if (isStudent && task.course) {
-      return <p className="mt-1 text-sm opacity-70">Course: {task.course}</p>;
+    if (isStudent && task.courseId) {
+      return <p className="mt-1 text-sm opacity-70">Course: {task.courseId}</p>;
     }
 
-    if (isWork && task.project) {
-      return <p className="mt-1 text-sm opacity-70">Project: {task.project}</p>;
+    if (isWork && task.projectId) {
+      return (
+        <p className="mt-1 text-sm opacity-70">Project: {task.projectId}</p>
+      );
     }
 
     return null;
@@ -529,7 +548,7 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
   };
 
   const taskStatusLabel = (task) => {
-    if (task.status === "done" || task.completed === true) return "Completed";
+    if (task.status === "completed") return "Completed";
     if (task.status === "in-progress") return "In Progress";
     return "To Do";
   };
@@ -577,8 +596,7 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
         ) : (
           <div className="space-y-4">
             {filteredTasksByTab.map((task) => {
-              const isCompleted =
-                task.status === "done" || task.completed === true;
+              const isCompleted = task.status === "completed";
 
               return (
                 <div
@@ -736,7 +754,7 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
                   >
                     <option value="todo">To Do</option>
                     <option value="in-progress">In Progress</option>
-                    <option value="done">Done</option>
+                    <option value="completed">Completed</option>
                   </select>
                 </div>
               </div>
@@ -850,7 +868,7 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
                   >
                     <option value="todo">To Do</option>
                     <option value="in-progress">In Progress</option>
-                    <option value="done">Done</option>
+                    <option value="completed">Completed</option>
                   </select>
                 </div>
               </div>
@@ -959,7 +977,7 @@ function TaskManager({ selectedPersona, selectedPersonaName }) {
                 </button>
 
                 {!(
-                  selectedTask.status === "done" ||
+                  selectedTask.status === "completed" ||
                   selectedTask.completed === true
                 ) && (
                   <button

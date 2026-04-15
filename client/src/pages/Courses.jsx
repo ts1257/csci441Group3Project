@@ -4,12 +4,15 @@ import DashboardLayout from "../components/dashboard/DashboardLayout";
 function Courses() {
   const [courses, setCourses] = useState([]);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [showEditCourseModal, setShowEditCourseModal] = useState(false);
   const [showViewCourseModal, setShowViewCourseModal] = useState(false);
 
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [courseForm, setCourseForm] = useState({
     name: "",
@@ -21,19 +24,46 @@ function Courses() {
   });
 
   useEffect(() => {
-    const storedCourses = localStorage.getItem("studentCourses");
-
-    try {
-      const parsedCourses = storedCourses ? JSON.parse(storedCourses) : [];
-      setCourses(Array.isArray(parsedCourses) ? parsedCourses : []);
-    } catch {
-      setCourses([]);
-    }
+    fetchCourses();
   }, []);
 
-  const persistCourses = (updatedCourses) => {
-    setCourses(updatedCourses);
-    localStorage.setItem("studentCourses", JSON.stringify(updatedCourses));
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/courses`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch courses");
+      }
+
+      const courseList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.courses)
+          ? data.courses
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+
+      setCourses(courseList);
+    } catch (err) {
+      setError(err.message || "Failed to load courses");
+      setCourses([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetCourseForm = () => {
@@ -55,28 +85,54 @@ function Courses() {
     }));
   };
 
-  const handleAddCourse = (e) => {
+  const handleAddCourse = async (e) => {
     e.preventDefault();
 
     if (!courseForm.name.trim()) return;
 
-    const newCourse = {
-      id: Date.now().toString(),
-      name: courseForm.name,
-      instructor: courseForm.instructor,
-      credits: courseForm.credits,
-      color: courseForm.color,
-      notes: courseForm.notes,
-      status: courseForm.status,
-      completed: courseForm.status === "completed",
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      setSubmitting(true);
+      setError("");
 
-    const updatedCourses = [newCourse, ...courses];
-    persistCourses(updatedCourses);
+      const token = localStorage.getItem("token");
 
-    resetCourseForm();
-    setShowAddCourseModal(false);
+      const payload = {
+        name: courseForm.name,
+        instructor: courseForm.instructor,
+        credits: courseForm.credits,
+        color: courseForm.color,
+        notes: courseForm.notes,
+        status: courseForm.status,
+      };
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/courses`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to create course");
+      }
+
+      const newCourse = data.course || data.data || data;
+      setCourses((prev) => [newCourse, ...prev]);
+
+      resetCourseForm();
+      setShowAddCourseModal(false);
+    } catch (err) {
+      setError(err.message || "Failed to add course");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openViewCourseModal = (course) => {
@@ -97,69 +153,143 @@ function Courses() {
     setShowEditCourseModal(true);
   };
 
-  const handleEditCourse = (e) => {
+  const handleEditCourse = async (e) => {
     e.preventDefault();
 
     if (!selectedCourse || !courseForm.name.trim()) return;
 
-    const updatedCourses = courses.map((course) =>
-      course.id === selectedCourse.id
-        ? {
-            ...course,
-            name: courseForm.name,
-            instructor: courseForm.instructor,
-            credits: courseForm.credits,
-            color: courseForm.color,
-            notes: courseForm.notes,
-            status: courseForm.status,
-            completed: courseForm.status === "completed",
-          }
-        : course,
-    );
+    try {
+      setSubmitting(true);
+      setError("");
 
-    persistCourses(updatedCourses);
+      const token = localStorage.getItem("token");
 
-    const updatedSelectedCourse = updatedCourses.find(
-      (course) => course.id === selectedCourse.id,
-    );
-    setSelectedCourse(updatedSelectedCourse || null);
+      const payload = {
+        name: courseForm.name,
+        instructor: courseForm.instructor,
+        credits: courseForm.credits,
+        color: courseForm.color,
+        notes: courseForm.notes,
+        status: courseForm.status,
+      };
 
-    setShowEditCourseModal(false);
-    resetCourseForm();
-  };
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/courses/${selectedCourse._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
 
-  const handleDeleteCourse = (courseId) => {
-    const confirmed = window.confirm("Delete this course?");
-    if (!confirmed) return;
+      const data = await response.json();
 
-    const updatedCourses = courses.filter((course) => course.id !== courseId);
-    persistCourses(updatedCourses);
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update course");
+      }
 
-    if (selectedCourse?.id === courseId) {
-      setSelectedCourse(null);
-      setShowViewCourseModal(false);
+      const updatedCourse = data.course || data.data || data;
+
+      setCourses((prev) =>
+        prev.map((course) =>
+          course._id === selectedCourse._id ? updatedCourse : course,
+        ),
+      );
+
+      setSelectedCourse(updatedCourse);
       setShowEditCourseModal(false);
+      resetCourseForm();
+    } catch (err) {
+      setError(err.message || "Failed to update course");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleCompleteCourse = (courseId) => {
-    const updatedCourses = courses.map((course) =>
-      course.id === courseId
-        ? {
-            ...course,
-            completed: true,
-            status: "completed",
-          }
-        : course,
-    );
+  const handleDeleteCourse = async (courseId) => {
+    const confirmed = window.confirm("Delete this course?");
+    if (!confirmed) return;
 
-    persistCourses(updatedCourses);
+    try {
+      setError("");
 
-    if (selectedCourse?.id === courseId) {
-      const updatedSelected = updatedCourses.find(
-        (course) => course.id === courseId,
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/courses/${courseId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
       );
-      setSelectedCourse(updatedSelected || null);
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to delete course");
+      }
+
+      setCourses((prev) => prev.filter((course) => course._id !== courseId));
+
+      if (selectedCourse?._id === courseId) {
+        setSelectedCourse(null);
+        setShowViewCourseModal(false);
+        setShowEditCourseModal(false);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete course");
+    }
+  };
+
+  const handleCompleteCourse = async (courseId) => {
+    try {
+      setError("");
+
+      const token = localStorage.getItem("token");
+      const courseToUpdate = courses.find((c) => c._id === courseId);
+
+      if (!courseToUpdate) return;
+
+      const payload = {
+        ...courseToUpdate,
+        status: "completed",
+      };
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/courses/${courseId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to complete course");
+      }
+
+      const updatedCourse = data.course || data.data || data;
+
+      setCourses((prev) =>
+        prev.map((course) =>
+          course._id === courseId ? updatedCourse : course,
+        ),
+      );
+
+      if (selectedCourse?._id === courseId) {
+        setSelectedCourse(updatedCourse);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to complete course");
     }
   };
 
@@ -269,14 +399,14 @@ function Courses() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {filteredCourses.map((course) => (
                   <div
-                    key={course.id}
+                    key={course._id}
                     className={`rounded-3xl border p-5 min-w-0 overflow-hidden ${
                       colorClasses[course.color] ||
                       "bg-base-100 border-base-300"
                     }`}
                   >
                     <div className="mb-3 flex items-start justify-between gap-3">
-                      <h3 className="text-xl font-semibold wrap-break-wordword">
+                      <h3 className="text-xl font-semibold wrap-break-word">
                         {course.name}
                       </h3>
                       <span
@@ -316,7 +446,7 @@ function Courses() {
                       {course.status !== "completed" && !course.completed && (
                         <button
                           className="btn btn-success btn-sm rounded-xl text-white"
-                          onClick={() => handleCompleteCourse(course.id)}
+                          onClick={() => handleCompleteCourse(course._id)}
                         >
                           Complete
                         </button>
@@ -324,7 +454,7 @@ function Courses() {
 
                       <button
                         className="btn btn-error btn-sm rounded-xl text-white"
-                        onClick={() => handleDeleteCourse(course.id)}
+                        onClick={() => handleDeleteCourse(course._id)}
                       >
                         Delete
                       </button>
@@ -336,7 +466,7 @@ function Courses() {
           </section>
 
           {showAddCourseModal && (
-            <div className="fixed inset-0 z-60lex items-center justify-center bg-black/40 px-4">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
               <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Add Course</h2>
@@ -469,7 +599,7 @@ function Courses() {
           )}
 
           {showEditCourseModal && selectedCourse && (
-            <div className="fixed inset-0 z-60lex items-center justify-center bg-black/40 px-4">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
               <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Edit Course</h2>
@@ -600,7 +730,7 @@ function Courses() {
           )}
 
           {showViewCourseModal && selectedCourse && (
-            <div className="fixed inset-0 z-60lex items-center justify-center bg-black/40 px-4">
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 px-4">
               <div className="w-full max-w-lg rounded-4xl border border-base-300 bg-base-100 p-6 shadow-xl">
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-2xl font-bold">Course Details</h2>
@@ -618,7 +748,7 @@ function Courses() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm opacity-60">Course Name</p>
-                    <p className="mt-1 text-lg font-semibold wrap-break-wordword">
+                    <p className="mt-1 text-lg font-semibold wrap-break-word">
                       {selectedCourse.name}
                     </p>
                   </div>
@@ -669,7 +799,7 @@ function Courses() {
                         <button
                           className="btn btn-success rounded-2xl text-white"
                           onClick={() =>
-                            handleCompleteCourse(selectedCourse.id)
+                            handleCompleteCourse(selectedCourse._id)
                           }
                         >
                           Complete
@@ -678,7 +808,7 @@ function Courses() {
 
                     <button
                       className="btn btn-error rounded-2xl text-white"
-                      onClick={() => handleDeleteCourse(selectedCourse.id)}
+                      onClick={() => handleDeleteCourse(selectedCourse._id)}
                     >
                       Delete
                     </button>

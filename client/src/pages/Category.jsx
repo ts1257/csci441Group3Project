@@ -4,11 +4,14 @@ import DashboardLayout from "../components/dashboard/DashboardLayout";
 function Category() {
   const [categories, setCategories] = useState([]);
   const [expandedCategoryId, setExpandedCategoryId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -17,22 +20,46 @@ function Category() {
   });
 
   useEffect(() => {
-    const stored = localStorage.getItem("financeCategories");
-
-    try {
-      const parsed = stored ? JSON.parse(stored) : [];
-      setCategories(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setCategories([]);
-    }
+    fetchCategories();
   }, []);
 
-  const persistCategories = (updatedCategories) => {
-    setCategories(updatedCategories);
-    localStorage.setItem(
-      "financeCategories",
-      JSON.stringify(updatedCategories),
-    );
+  const fetchCategories = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/categories`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch categories");
+      }
+
+      const categoryList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.categories)
+          ? data.categories
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+
+      setCategories(categoryList);
+    } catch (err) {
+      setError(err.message || "Failed to load categories");
+      setCategories([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetForm = () => {
@@ -158,51 +185,51 @@ function Category() {
     }));
   };
 
-  const handleAddCategory = (e) => {
+  const handleAddCategory = async (e) => {
     e.preventDefault();
 
     const categoryName = form.name.trim();
     if (!categoryName) return;
 
-    const duplicateCategory = findCategoryByName(categoryName);
+    try {
+      setSubmitting(true);
+      setError("");
 
-    if (duplicateCategory) {
-      const mergedSubcategories = [
-        ...(duplicateCategory.subcategories || []),
-        ...form.subcategories.filter(
-          (subcategory) =>
-            !(duplicateCategory.subcategories || []).some(
-              (existing) =>
-                existing.toLowerCase() === subcategory.toLowerCase(),
-            ),
-        ),
-      ];
+      const token = localStorage.getItem("token");
 
-      const updatedCategories = categories.map((category) =>
-        category.id === duplicateCategory.id
-          ? {
-              ...category,
-              subcategories: mergedSubcategories,
-            }
-          : category,
-      );
-
-      persistCategories(updatedCategories);
-      setExpandedCategoryId(duplicateCategory.id);
-    } else {
-      const newCategory = {
-        id: Date.now().toString(),
+      const payload = {
         name: categoryName,
         subcategories: form.subcategories,
-        createdAt: new Date().toISOString(),
       };
 
-      const updatedCategories = [newCategory, ...categories];
-      persistCategories(updatedCategories);
-      setExpandedCategoryId(newCategory.id);
-    }
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/categories`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
 
-    closeModal();
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to create category");
+      }
+
+      const newCategory = data.category || data.data || data;
+      setCategories((prev) => [newCategory, ...prev]);
+      setExpandedCategoryId(newCategory._id);
+
+      closeModal();
+    } catch (err) {
+      setError(err.message || "Failed to add category");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openEditModal = (category) => {
@@ -215,7 +242,7 @@ function Category() {
     setShowEditModal(true);
   };
 
-  const handleEditCategory = (e) => {
+  const handleEditCategory = async (e) => {
     e.preventDefault();
 
     if (!selectedCategory) return;
@@ -223,69 +250,85 @@ function Category() {
     const categoryName = form.name.trim();
     if (!categoryName) return;
 
-    const conflictingCategory = categories.find(
-      (category) =>
-        category.id !== selectedCategory.id &&
-        category.name?.toLowerCase().trim() === categoryName.toLowerCase(),
-    );
+    try {
+      setSubmitting(true);
+      setError("");
 
-    if (conflictingCategory) {
-      const mergedSubcategories = [
-        ...(conflictingCategory.subcategories || []),
-        ...form.subcategories.filter(
-          (subcategory) =>
-            !(conflictingCategory.subcategories || []).some(
-              (existing) =>
-                existing.toLowerCase() === subcategory.toLowerCase(),
-            ),
+      const token = localStorage.getItem("token");
+
+      const payload = {
+        name: categoryName,
+        subcategories: form.subcategories,
+      };
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/categories/${selectedCategory._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update category");
+      }
+
+      const updatedCategory = data.category || data.data || data;
+
+      setCategories((prev) =>
+        prev.map((category) =>
+          category._id === selectedCategory._id ? updatedCategory : category,
         ),
-      ];
-
-      const remainingCategories = categories.filter(
-        (category) => category.id !== selectedCategory.id,
       );
 
-      const updatedCategories = remainingCategories.map((category) =>
-        category.id === conflictingCategory.id
-          ? {
-              ...category,
-              subcategories: mergedSubcategories,
-            }
-          : category,
-      );
-
-      persistCategories(updatedCategories);
-      setExpandedCategoryId(conflictingCategory.id);
+      setExpandedCategoryId(selectedCategory._id);
       closeModal();
-      return;
+    } catch (err) {
+      setError(err.message || "Failed to update category");
+    } finally {
+      setSubmitting(false);
     }
-
-    const updatedCategories = categories.map((category) =>
-      category.id === selectedCategory.id
-        ? {
-            ...category,
-            name: categoryName,
-            subcategories: form.subcategories,
-          }
-        : category,
-    );
-
-    persistCategories(updatedCategories);
-    setExpandedCategoryId(selectedCategory.id);
-    closeModal();
   };
 
-  const handleDeleteCategory = (categoryId) => {
+  const handleDeleteCategory = async (categoryId) => {
     const confirmed = window.confirm("Delete this category?");
     if (!confirmed) return;
 
-    const updatedCategories = categories.filter(
-      (category) => category.id !== categoryId,
-    );
-    persistCategories(updatedCategories);
+    try {
+      setError("");
 
-    if (expandedCategoryId === categoryId) {
-      setExpandedCategoryId(null);
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/categories/${categoryId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to delete category");
+      }
+
+      setCategories((prev) =>
+        prev.filter((category) => category._id !== categoryId),
+      );
+
+      if (expandedCategoryId === categoryId) {
+        setExpandedCategoryId(null);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete category");
     }
   };
 
@@ -339,14 +382,14 @@ function Category() {
 
                 <div className="divide-y divide-base-300">
                   {categories.map((category) => {
-                    const isExpanded = expandedCategoryId === category.id;
+                    const isExpanded = expandedCategoryId === category._id;
 
                     return (
-                      <div key={category.id} className="bg-base-100">
+                      <div key={category._id} className="bg-base-100">
                         <div className="grid gap-3 px-4 py-4 md:grid-cols-[1.5fr_1fr_1fr] md:items-center">
                           <div className="min-w-0">
                             <button
-                              onClick={() => toggleExpanded(category.id)}
+                              onClick={() => toggleExpanded(category._id)}
                               className="flex items-center gap-2 text-left"
                             >
                               <span className="text-sm">
@@ -373,7 +416,7 @@ function Category() {
 
                             <button
                               className="btn btn-error btn-sm rounded-xl text-white"
-                              onClick={() => handleDeleteCategory(category.id)}
+                              onClick={() => handleDeleteCategory(category._id)}
                             >
                               Delete
                             </button>

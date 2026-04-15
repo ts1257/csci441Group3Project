@@ -12,10 +12,33 @@ const projectSchema = new mongoose.Schema(
       required: [true, "Project name is required"],
       trim: true,
     },
+    client: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    budget: {
+      type: Number,
+      default: 0,
+    },
+    color: {
+      type: String,
+      default: "#10b981",
+    },
     description: {
       type: String,
       trim: true,
       default: "",
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["active", "completed"],
+      default: "active",
     },
   },
   {

@@ -81,7 +81,14 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/dashboard/projects" element={<Projects />} />
+          <Route
+            path="/dashboard/projects"
+            element={
+              <ProtectedRoute>
+                <Projects />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </div>
       <Footer />

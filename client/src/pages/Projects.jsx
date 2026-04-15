@@ -4,12 +4,15 @@ import DashboardLayout from "../components/dashboard/DashboardLayout";
 function Projects() {
   const [projects, setProjects] = useState([]);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [showViewProjectModal, setShowViewProjectModal] = useState(false);
 
   const [selectedProject, setSelectedProject] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [projectForm, setProjectForm] = useState({
     name: "",
@@ -21,19 +24,46 @@ function Projects() {
   });
 
   useEffect(() => {
-    const storedProjects = localStorage.getItem("workProjects");
-
-    try {
-      const parsedProjects = storedProjects ? JSON.parse(storedProjects) : [];
-      setProjects(Array.isArray(parsedProjects) ? parsedProjects : []);
-    } catch {
-      setProjects([]);
-    }
+    fetchProjects();
   }, []);
 
-  const persistProjects = (updatedProjects) => {
-    setProjects(updatedProjects);
-    localStorage.setItem("workProjects", JSON.stringify(updatedProjects));
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/projects`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch projects");
+      }
+
+      const projectList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.projects)
+          ? data.projects
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+
+      setProjects(projectList);
+    } catch (err) {
+      setError(err.message || "Failed to load projects");
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetProjectForm = () => {
@@ -55,28 +85,54 @@ function Projects() {
     }));
   };
 
-  const handleAddProject = (e) => {
+  const handleAddProject = async (e) => {
     e.preventDefault();
 
     if (!projectForm.name.trim()) return;
 
-    const newProject = {
-      id: Date.now().toString(),
-      name: projectForm.name,
-      client: projectForm.client,
-      budget: projectForm.budget,
-      color: projectForm.color,
-      notes: projectForm.notes,
-      status: projectForm.status,
-      completed: projectForm.status === "completed",
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      setSubmitting(true);
+      setError("");
 
-    const updatedProjects = [newProject, ...projects];
-    persistProjects(updatedProjects);
+      const token = localStorage.getItem("token");
 
-    resetProjectForm();
-    setShowAddProjectModal(false);
+      const payload = {
+        name: projectForm.name,
+        client: projectForm.client,
+        budget: projectForm.budget,
+        color: projectForm.color,
+        notes: projectForm.notes,
+        status: projectForm.status,
+      };
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/projects`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to create project");
+      }
+
+      const newProject = data.project || data.data || data;
+      setProjects((prev) => [newProject, ...prev]);
+
+      resetProjectForm();
+      setShowAddProjectModal(false);
+    } catch (err) {
+      setError(err.message || "Failed to add project");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openViewProjectModal = (project) => {
@@ -97,71 +153,145 @@ function Projects() {
     setShowEditProjectModal(true);
   };
 
-  const handleEditProject = (e) => {
+  const handleEditProject = async (e) => {
     e.preventDefault();
 
     if (!selectedProject || !projectForm.name.trim()) return;
 
-    const updatedProjects = projects.map((project) =>
-      project.id === selectedProject.id
-        ? {
-            ...project,
-            name: projectForm.name,
-            client: projectForm.client,
-            budget: projectForm.budget,
-            color: projectForm.color,
-            notes: projectForm.notes,
-            status: projectForm.status,
-            completed: projectForm.status === "completed",
-          }
-        : project,
-    );
+    try {
+      setSubmitting(true);
+      setError("");
 
-    persistProjects(updatedProjects);
+      const token = localStorage.getItem("token");
 
-    const updatedSelectedProject = updatedProjects.find(
-      (project) => project.id === selectedProject.id,
-    );
-    setSelectedProject(updatedSelectedProject || null);
+      const payload = {
+        name: projectForm.name,
+        client: projectForm.client,
+        budget: projectForm.budget,
+        color: projectForm.color,
+        notes: projectForm.notes,
+        status: projectForm.status,
+      };
 
-    setShowEditProjectModal(false);
-    resetProjectForm();
-  };
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/projects/${selectedProject._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
 
-  const handleDeleteProject = (projectId) => {
-    const confirmed = window.confirm("Delete this project?");
-    if (!confirmed) return;
+      const data = await response.json();
 
-    const updatedProjects = projects.filter(
-      (project) => project.id !== projectId,
-    );
-    persistProjects(updatedProjects);
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update project");
+      }
 
-    if (selectedProject?.id === projectId) {
-      setSelectedProject(null);
-      setShowViewProjectModal(false);
+      const updatedProject = data.project || data.data || data;
+
+      setProjects((prev) =>
+        prev.map((project) =>
+          project._id === selectedProject._id ? updatedProject : project,
+        ),
+      );
+
+      setSelectedProject(updatedProject);
       setShowEditProjectModal(false);
+      resetProjectForm();
+    } catch (err) {
+      setError(err.message || "Failed to update project");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleCompleteProject = (projectId) => {
-    const updatedProjects = projects.map((project) =>
-      project.id === projectId
-        ? {
-            ...project,
-            completed: true,
-            status: "completed",
-          }
-        : project,
-    );
+  const handleDeleteProject = async (projectId) => {
+    const confirmed = window.confirm("Delete this project?");
+    if (!confirmed) return;
 
-    persistProjects(updatedProjects);
+    try {
+      setError("");
 
-    if (selectedProject?.id === projectId) {
-      const updatedSelected = updatedProjects.find(
-        (project) => project.id === projectId,
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/projects/${projectId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
       );
-      setSelectedProject(updatedSelected || null);
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to delete project");
+      }
+
+      setProjects((prev) =>
+        prev.filter((project) => project._id !== projectId),
+      );
+
+      if (selectedProject?._id === projectId) {
+        setSelectedProject(null);
+        setShowViewProjectModal(false);
+        setShowEditProjectModal(false);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete project");
+    }
+  };
+
+  const handleCompleteProject = async (projectId) => {
+    try {
+      setError("");
+
+      const token = localStorage.getItem("token");
+      const projectToUpdate = projects.find((p) => p._id === projectId);
+
+      if (!projectToUpdate) return;
+
+      const payload = {
+        ...projectToUpdate,
+        status: "completed",
+      };
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/projects/${projectId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to complete project");
+      }
+
+      const updatedProject = data.project || data.data || data;
+
+      setProjects((prev) =>
+        prev.map((project) =>
+          project._id === projectId ? updatedProject : project,
+        ),
+      );
+
+      if (selectedProject?._id === projectId) {
+        setSelectedProject(updatedProject);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to complete project");
     }
   };
 
@@ -271,7 +401,7 @@ function Projects() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {filteredProjects.map((project) => (
                   <div
-                    key={project.id}
+                    key={project._id}
                     className={`rounded-3xl border p-5 min-w-0 overflow-hidden ${
                       colorClasses[project.color] ||
                       "bg-base-100 border-base-300"
@@ -318,7 +448,7 @@ function Projects() {
                       {project.status !== "completed" && !project.completed && (
                         <button
                           className="btn btn-success btn-sm rounded-xl text-white"
-                          onClick={() => handleCompleteProject(project.id)}
+                          onClick={() => handleCompleteProject(project._id)}
                         >
                           Complete
                         </button>
@@ -326,7 +456,7 @@ function Projects() {
 
                       <button
                         className="btn btn-error btn-sm rounded-xl text-white"
-                        onClick={() => handleDeleteProject(project.id)}
+                        onClick={() => handleDeleteProject(project._id)}
                       >
                         Delete
                       </button>
@@ -665,7 +795,7 @@ function Projects() {
                         <button
                           className="btn btn-success rounded-2xl text-white"
                           onClick={() =>
-                            handleCompleteProject(selectedProject.id)
+                            handleCompleteProject(selectedProject._id)
                           }
                         >
                           Complete
@@ -674,7 +804,7 @@ function Projects() {
 
                     <button
                       className="btn btn-error rounded-2xl text-white"
-                      onClick={() => handleDeleteProject(selectedProject.id)}
+                      onClick={() => handleDeleteProject(selectedProject._id)}
                     >
                       Delete
                     </button>
