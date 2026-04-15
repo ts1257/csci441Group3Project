@@ -8,9 +8,10 @@ const taskSchema = new mongoose.Schema(
       required: true,
     },
     persona: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Persona",
-      required: true,
+      type: String,
+      enum: ["student", "work", "finance"],
+      required: [true, "Task persona is required"],
+      default: "student",
     },
     title: {
       type: String,
@@ -33,12 +34,18 @@ const taskSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["todo", "in-progress", "done"],
+      enum: ["todo", "in-progress", "completed"],
       default: "todo",
     },
-    completed: {
-      type: Boolean,
-      default: false,
+    courseId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    projectId: {
+      type: String,
+      trim: true,
+      default: "",
     },
   },
   {

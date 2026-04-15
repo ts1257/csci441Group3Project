@@ -1,24 +1,12 @@
 import Task from "../models/Task.js";
-import Persona from "../models/Persona.js";
 
 export async function createTask(req, res, next) {
   try {
-    const { title, description, dueDate, priority, status, persona } = req.body;
+    const { title, description, dueDate, priority, status, persona, courseId, projectId } = req.body;
 
     if (!title || !persona) {
       return res.status(400).json({
         message: "Task title and persona are required",
-      });
-    }
-
-    const existingPersona = await Persona.findOne({
-      _id: persona,
-      user: req.user.userId,
-    });
-
-    if (!existingPersona) {
-      return res.status(404).json({
-        message: "Associated persona not found",
       });
     }
 
@@ -30,14 +18,13 @@ export async function createTask(req, res, next) {
       dueDate: dueDate || null,
       priority: priority || "medium",
       status: status || "todo",
-      completed: status === "done",
+      courseId: courseId?.trim() || "",
+      projectId: projectId?.trim() || "",
     });
-
-    const populatedTask = await task.populate("persona", "name color");
 
     res.status(201).json({
       message: "Task created successfully",
-      task: populatedTask,
+      task,
     });
   } catch (error) {
     next(error);
@@ -56,9 +43,7 @@ export async function getTasks(req, res, next) {
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
 
-    const tasks = await Task.find(filter)
-      .populate("persona", "name color")
-      .sort({ createdAt: -1 });
+    const tasks = await Task.find(filter).sort({ createdAt: -1 });
 
     res.status(200).json({
       tasks,
@@ -71,7 +56,7 @@ export async function getTasks(req, res, next) {
 export async function updateTask(req, res, next) {
   try {
     const { id } = req.params;
-    const { title, description, dueDate, priority, status, completed, persona } = req.body;
+    const { title, description, dueDate, priority, status, persona, courseId, projectId } = req.body;
 
     const task = await Task.findOne({
       _id: id,
@@ -84,34 +69,16 @@ export async function updateTask(req, res, next) {
       });
     }
 
-    if (persona !== undefined) {
-      const existingPersona = await Persona.findOne({
-        _id: persona,
-        user: req.user.userId,
-      });
-
-      if (!existingPersona) {
-        return res.status(404).json({
-          message: "Associated persona not found",
-        });
-      }
-
-      task.persona = persona;
-    }
-
+    if (persona !== undefined) task.persona = persona;
     if (title !== undefined) task.title = title.trim();
     if (description !== undefined) task.description = description.trim();
     if (dueDate !== undefined) task.dueDate = dueDate || null;
     if (priority !== undefined) task.priority = priority;
     if (status !== undefined) task.status = status;
-    if (completed !== undefined) task.completed = completed;
-
-    if (status === "done") {
-      task.completed = true;
-    }
+    if (courseId !== undefined) task.courseId = courseId.trim();
+    if (projectId !== undefined) task.projectId = projectId.trim();
 
     const updatedTask = await task.save();
-    await updatedTask.populate("persona", "name color");
 
     res.status(200).json({
       message: "Task updated successfully",

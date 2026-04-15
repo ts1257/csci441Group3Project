@@ -12,6 +12,6 @@ const router = express.Router();
 router.use(protect);
 
 router.route("/").get(getTasks).post(createTask);
-router.route("/:id").put(updateTask).delete(deleteTask);
+router.route("/:id").patch(updateTask).delete(deleteTask);
 
 export default router;

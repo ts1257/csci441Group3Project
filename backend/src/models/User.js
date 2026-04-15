@@ -19,6 +19,11 @@ const userSchema = new mongoose.Schema(
       required: [true, "Password is required"],
       minlength: 6,
     },
+    personas: {
+      type: [String],
+      enum: ["student", "work", "finance"],
+      default: ["student", "work", "finance"],
+    },
   },
   {
     timestamps: true,

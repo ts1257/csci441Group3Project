@@ -1,6 +1,5 @@
 import bcrypt from "bcryptjs";
 import User from "../models/User.js";
-import Persona from "../models/Persona.js";
 import { generateToken } from "../utils/generateToken.js";
 
 export async function registerUser(req, res, next) {
@@ -35,33 +34,13 @@ export async function registerUser(req, res, next) {
       password: hashedPassword,
     });
 
-    await Persona.insertMany([
-      {
-        user: user._id,
-        name: "Student",
-        description: "Academic goals, coursework, and study plans",
-        color: "#3b82f6",
-      },
-      {
-        user: user._id,
-        name: "Work",
-        description: "Professional tasks, projects, and deadlines",
-        color: "#f59e0b",
-      },
-      {
-        user: user._id,
-        name: "Personal",
-        description: "Personal life tasks, habits, and reminders",
-        color: "#10b981",
-      },
-    ]);
-
     res.status(201).json({
       message: "User registered successfully",
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
+        personas: user.personas,
       },
       token: generateToken(user._id.toString()),
     });
@@ -103,6 +82,7 @@ export async function loginUser(req, res, next) {
         id: user._id,
         name: user.name,
         email: user.email,
+        personas: user.personas,
       },
       token: generateToken(user._id.toString()),
     });
