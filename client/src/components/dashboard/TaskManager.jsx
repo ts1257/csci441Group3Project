@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 
-function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
-  const [tasks, setTasks] = useState([]);
-  const [tasksLoading, setTasksLoading] = useState(false);
-  const [tasksError, setTasksError] = useState("");
+function TaskManager({
+  selectedPersona,
+  selectedPersonaName,
+  tasks,
+  tasksLoading,
+  tasksError,
+  isOffline,
+  syncStatus,
+  pendingChangesCount,
+  addTask,
+  updateTask,
+  completeTask,
+  deleteTask,
+  refreshTasks,
+}) {
   const [activeTab, setActiveTab] = useState("Today");
 
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
@@ -109,59 +120,6 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     return dateValue;
   };
 
-  useEffect(() => {
-    const fetchTasks = async () => {
-      if (!selectedPersona) {
-        setTasks([]);
-        return;
-      }
-
-      try {
-        setTasksLoading(true);
-        setTasksError("");
-
-        const token = localStorage.getItem("token");
-
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/tasks`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Failed to fetch tasks");
-        }
-
-        const taskList = Array.isArray(data)
-          ? data
-          : Array.isArray(data.tasks)
-            ? data.tasks
-            : Array.isArray(data.data)
-              ? data.data
-              : [];
-
-        const filteredTasks = taskList.filter((task) => {
-          return task.persona === normalizedPersona;
-        });
-
-        setTasks(filteredTasks);
-        onTasksChange?.(filteredTasks);
-      } catch (err) {
-        setTasksError(err.message || "Failed to load tasks");
-        setTasks([]);
-      } finally {
-        setTasksLoading(false);
-      }
-    };
-
-    fetchTasks();
-  }, [normalizedPersona]);
-
   const handleTaskInputChange = (e) => {
     const { name, value } = e.target;
     setNewTask((prev) => ({
@@ -215,41 +173,8 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     try {
       setTaskSubmitting(true);
       setTaskSubmitError("");
-
-      const token = localStorage.getItem("token");
       const payload = buildPayload(newTask);
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/tasks`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to create task");
-      }
-
-      const createdTask = {
-        ...(data.task || data.data || data),
-        courseId: payload.courseId || "",
-        projectId: payload.projectId || "",
-      };
-
-      if (createdTask.persona === normalizedPersona) {
-        setTasks((prev) => {
-          const next = [createdTask, ...prev];
-          onTasksChange?.(next);
-          return next;
-        });
-      }
+      await addTask(payload);
 
       setNewTask(getInitialTaskState());
       setShowAddTaskModal(false);
@@ -292,41 +217,8 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     try {
       setTaskSubmitting(true);
       setTaskSubmitError("");
-
-      const token = localStorage.getItem("token");
       const payload = buildPayload(editingTask);
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${editingTask._id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to update task");
-      }
-
-      const updatedTask = {
-        ...(data.task || data.data || data),
-        courseId: payload.courseId || "",
-        projectId: payload.projectId || "",
-      };
-
-      setTasks((prev) => {
-        const next = prev.map((item) =>
-          item._id === editingTask._id ? updatedTask : item,
-        );
-        onTasksChange?.(next);
-        return next;
-      });
+      const updatedTask = await updateTask(editingTask._id, payload);
 
       if (selectedTask?._id === updatedTask._id) {
         setSelectedTask(updatedTask);
@@ -342,44 +234,13 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
 
   const handleCompleteTask = async (task) => {
     try {
-      const token = localStorage.getItem("token");
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            ...task,
-            status: "completed",
-          }),
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to complete task");
-      }
-
-      const updatedTask = data.task || data.data || data;
-
-      setTasks((prev) => {
-        const next = prev.map((item) =>
-          item._id === task._id ? updatedTask : item,
-        );
-        onTasksChange?.(next);
-        return next;
-      });
+      const updatedTask = await completeTask(task);
 
       if (selectedTask?._id === updatedTask._id) {
         setSelectedTask(updatedTask);
       }
     } catch (err) {
-      setTasksError(err.message || "Failed to complete task");
+      setTaskSubmitError(err.message || "Failed to complete task");
     }
   };
 
@@ -388,29 +249,7 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     if (!confirmed) return;
 
     try {
-      const token = localStorage.getItem("token");
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to delete task");
-      }
-
-      setTasks((prev) => {
-        const next = prev.filter((item) => item._id !== task._id);
-        onTasksChange?.(next);
-        return next;
-      });
+      await deleteTask(task._id);
 
       if (selectedTask?._id === task._id) {
         setSelectedTask(null);
@@ -418,7 +257,7 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
         setShowEditTaskModal(false);
       }
     } catch (err) {
-      setTasksError(err.message || "Failed to delete task");
+      setTaskSubmitError(err.message || "Failed to delete task");
     }
   };
 
@@ -557,17 +396,45 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     <>
       <section className="rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-2xl font-bold md:text-3xl">Tasks</h2>
-          <button
-            className="btn btn-primary rounded-2xl"
-            onClick={() => {
-              setTaskSubmitError("");
-              setShowAddTaskModal(true);
-            }}
-          >
-            Add Task
-          </button>
+          <div>
+            <h2 className="text-2xl font-bold md:text-3xl">Tasks</h2>
+            <p className="mt-2 text-sm opacity-70">
+              {isOffline
+                ? `Offline mode active. ${pendingChangesCount} change${pendingChangesCount === 1 ? "" : "s"} waiting to sync.`
+                : syncStatus === "syncing"
+                  ? "Syncing queued task changes..."
+                  : pendingChangesCount > 0
+                    ? `${pendingChangesCount} queued change${pendingChangesCount === 1 ? "" : "s"} still pending.`
+                    : "Tasks are synced with the server."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="btn btn-outline rounded-2xl"
+              onClick={() => void refreshTasks()}
+            >
+              Refresh
+            </button>
+            <button
+              className="btn btn-primary rounded-2xl"
+              onClick={() => {
+                setTaskSubmitError("");
+                setShowAddTaskModal(true);
+              }}
+            >
+              Add Task
+            </button>
+          </div>
         </div>
+
+        {(isOffline || pendingChangesCount > 0) && (
+          <div className="mb-5 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+            New tasks and edits are saved locally first through the dashboard,
+            then uploaded when the system monitor detects that you are online
+            again.
+          </div>
+        )}
 
         <div className="mb-6 flex flex-wrap gap-2">
           {tabs.map((tab) => (
@@ -628,6 +495,9 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
                         <span className="badge badge-outline">
                           {taskStatusLabel(task)}
                         </span>
+                        {task.syncStatus === "pending" && (
+                          <span className="badge badge-warning">Pending Sync</span>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2">
@@ -932,14 +802,21 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
               {isStudent && (
                 <div>
                   <p className="text-sm opacity-60">Course</p>
-                  <p className="mt-1">{selectedTask.course || "Not set"}</p>
+                  <p className="mt-1">{selectedTask.courseId || "Not set"}</p>
                 </div>
               )}
 
               {isWork && (
                 <div>
                   <p className="text-sm opacity-60">Project</p>
-                  <p className="mt-1">{selectedTask.project || "Not set"}</p>
+                  <p className="mt-1">{selectedTask.projectId || "Not set"}</p>
+                </div>
+              )}
+
+              {selectedTask.syncStatus === "pending" && (
+                <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+                  This task is saved locally and will sync to the cloud when the
+                  connection is available.
                 </div>
               )}
 

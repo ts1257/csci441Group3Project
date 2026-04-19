@@ -2,6 +2,117 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import Sidebar from "./Sidebar";
 
+const PERSONA_CACHE_PREFIX = "mpp-persona-cache-v1";
+const DEFAULT_PERSONAS = [
+  { _id: "offline-student", name: "Student" },
+  { _id: "offline-work", name: "Work" },
+  { _id: "offline-personal", name: "Personal" },
+];
+
+function getUserKey() {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    return user?._id || user?.id || user?.email || "guest";
+  } catch {
+    return "guest";
+  }
+}
+
+function getPersonaCacheKey() {
+  return `${PERSONA_CACHE_PREFIX}:${getUserKey()}`;
+}
+
+function sortPersonas(personaList) {
+  const personaOrder = { Student: 0, Work: 1, Finance: 2, Personal: 2 };
+  return [...personaList].sort(
+    (a, b) => (personaOrder[a.name] ?? 999) - (personaOrder[b.name] ?? 999),
+  );
+}
+
+function readCachedPersonas() {
+  try {
+    const cached = JSON.parse(
+      localStorage.getItem(getPersonaCacheKey()) || "[]",
+    );
+    return Array.isArray(cached) ? sortPersonas(cached) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedPersonas(personaList) {
+  localStorage.setItem(getPersonaCacheKey(), JSON.stringify(personaList));
+}
+
+function buildOfflinePersonaFallback() {
+  const cachedPersonas = readCachedPersonas();
+  if (cachedPersonas.length > 0) {
+    return cachedPersonas;
+  }
+
+  const savedPersonaId = localStorage.getItem("activePersonaId");
+  const savedPersonaName = localStorage.getItem("activePersonaName");
+
+  if (savedPersonaName) {
+    const normalizedSavedName = savedPersonaName.trim();
+    const existing = DEFAULT_PERSONAS.find(
+      (persona) =>
+        persona.name.toLowerCase() === normalizedSavedName.toLowerCase(),
+    );
+
+    if (existing) {
+      return sortPersonas(DEFAULT_PERSONAS);
+    }
+
+    return sortPersonas([
+      ...DEFAULT_PERSONAS,
+      {
+        _id:
+          savedPersonaId ||
+          `offline-${normalizedSavedName.toLowerCase().replace(/\s+/g, "-")}`,
+        name: normalizedSavedName,
+      },
+    ]);
+  }
+
+  return sortPersonas(DEFAULT_PERSONAS);
+}
+
+function resolveInitialPersona(personaList) {
+  const savedPersonaId = localStorage.getItem("activePersonaId");
+  const savedPersonaName = localStorage.getItem("activePersonaName");
+
+  let initialPersona = null;
+
+  if (savedPersonaId) {
+    initialPersona = personaList.find((persona) => persona._id === savedPersonaId);
+  }
+
+  if (!initialPersona && savedPersonaName) {
+    initialPersona = personaList.find(
+      (persona) =>
+        persona.name?.toLowerCase().trim() === savedPersonaName.toLowerCase().trim(),
+    );
+  }
+
+  if (!initialPersona && personaList.length > 0) {
+    initialPersona = personaList[0];
+  }
+
+  return initialPersona;
+}
+
+function getInitialPersonaState() {
+  const personas = buildOfflinePersonaFallback();
+  const initialPersona = resolveInitialPersona(personas);
+
+  return {
+    personas,
+    selectedPersona: initialPersona?._id || "",
+    selectedPersonaName: initialPersona?.name || "",
+  };
+}
+
 function DashboardLayout({
   title,
   subtitle,
@@ -13,12 +124,17 @@ function DashboardLayout({
   workSubtitle = null,
 }) {
   const navigate = useNavigate();
+  const initialPersonaState = getInitialPersonaState();
 
   const [online, setOnline] = useState(navigator.onLine);
-  const [personas, setPersonas] = useState([]);
-  const [selectedPersona, setSelectedPersona] = useState("");
-  const [selectedPersonaName, setSelectedPersonaName] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [personas, setPersonas] = useState(initialPersonaState.personas);
+  const [selectedPersona, setSelectedPersona] = useState(
+    initialPersonaState.selectedPersona,
+  );
+  const [selectedPersonaName, setSelectedPersonaName] = useState(
+    initialPersonaState.selectedPersonaName,
+  );
+  const [loading, setLoading] = useState(navigator.onLine);
   const [error, setError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -73,6 +189,24 @@ function DashboardLayout({
   }, []);
 
   useEffect(() => {
+    const fallbackPersonas = buildOfflinePersonaFallback();
+    const initialFallbackPersona = resolveInitialPersona(fallbackPersonas);
+
+    setPersonas(fallbackPersonas);
+
+    if (initialFallbackPersona) {
+      setSelectedPersona(initialFallbackPersona._id);
+      setSelectedPersonaName(initialFallbackPersona.name);
+      localStorage.setItem("activePersonaId", initialFallbackPersona._id);
+      localStorage.setItem("activePersonaName", initialFallbackPersona.name);
+    }
+
+    if (!online) {
+      setError("");
+      setLoading(false);
+      return;
+    }
+
     const fetchPersonas = async () => {
       try {
         setLoading(true);
@@ -103,37 +237,12 @@ function DashboardLayout({
               ? data.data
               : [];
 
-        // Sort personas: Student first, then Work, then Finance
-        const personaOrder = { Student: 0, Work: 1, Finance: 2 };
-        const sortedPersonas = personaList.sort(
-          (a, b) =>
-            (personaOrder[a.name] ?? 999) - (personaOrder[b.name] ?? 999),
-        );
+        const sortedPersonas = sortPersonas(personaList);
 
         setPersonas(sortedPersonas);
+        writeCachedPersonas(sortedPersonas);
 
-        const savedPersonaId = localStorage.getItem("activePersonaId");
-        const savedPersonaName = localStorage.getItem("activePersonaName");
-
-        let initialPersona = null;
-
-        if (savedPersonaId) {
-          initialPersona = personaList.find(
-            (persona) => persona._id === savedPersonaId,
-          );
-        }
-
-        if (!initialPersona && savedPersonaName) {
-          initialPersona = personaList.find(
-            (persona) =>
-              persona.name?.toLowerCase().trim() ===
-              savedPersonaName.toLowerCase().trim(),
-          );
-        }
-
-        if (!initialPersona && personaList.length > 0) {
-          initialPersona = personaList[0];
-        }
+        const initialPersona = resolveInitialPersona(sortedPersonas);
 
         if (initialPersona) {
           setSelectedPersona(initialPersona._id);
@@ -142,26 +251,49 @@ function DashboardLayout({
           localStorage.setItem("activePersonaName", initialPersona.name);
         }
       } catch (err) {
-        setError(err.message || "Something went wrong");
-        setPersonas([]);
+        const offlinePersonas = buildOfflinePersonaFallback();
+        const initialPersona = resolveInitialPersona(offlinePersonas);
+
+        setPersonas(offlinePersonas);
+
+        if (initialPersona) {
+          setSelectedPersona(initialPersona._id);
+          setSelectedPersonaName(initialPersona.name);
+          localStorage.setItem("activePersonaId", initialPersona._id);
+          localStorage.setItem("activePersonaName", initialPersona.name);
+        }
+
+        if (offlinePersonas.length > 0) {
+          setError("");
+        } else {
+          setError(err.message || "Something went wrong");
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchPersonas();
-  }, []);
+  }, [online]);
 
-  const normalizedPersona = selectedPersonaName?.toLowerCase().trim();
+  const effectivePersonas =
+    personas.length > 0 ? personas : buildOfflinePersonaFallback();
+  const effectiveInitialPersona = resolveInitialPersona(effectivePersonas);
+  const effectiveSelectedPersona =
+    selectedPersona || effectiveInitialPersona?._id || "";
+  const effectiveSelectedPersonaName =
+    selectedPersonaName || effectiveInitialPersona?.name || "";
+
+  const normalizedPersona = effectiveSelectedPersonaName?.toLowerCase().trim();
   const isFinance =
     normalizedPersona === "personal" || normalizedPersona === "finance";
 
   const displayPersonaName = useMemo(() => {
-    return isFinance ? "Finance" : selectedPersonaName;
-  }, [isFinance, selectedPersonaName]);
+    return isFinance ? "Finance" : effectiveSelectedPersonaName;
+  }, [effectiveSelectedPersonaName, isFinance]);
 
   useEffect(() => {
-    if (!restrictTo || !selectedPersonaName) return;
+    if (!restrictTo || !effectiveSelectedPersonaName) return;
 
     let allowed = false;
 
@@ -178,7 +310,7 @@ function DashboardLayout({
     if (!allowed) {
       navigate("/dashboard", { replace: true });
     }
-  }, [restrictTo, selectedPersonaName, normalizedPersona, isFinance, navigate]);
+  }, [restrictTo, effectiveSelectedPersonaName, normalizedPersona, isFinance, navigate]);
 
   const handlePersonaChange = (e) => {
     const personaId = e.target.value;
@@ -213,9 +345,9 @@ function DashboardLayout({
     typeof children === "function"
       ? children({
           online,
-          personas,
-          selectedPersona,
-          selectedPersonaName,
+          personas: effectivePersonas,
+          selectedPersona: effectiveSelectedPersona,
+          selectedPersonaName: effectiveSelectedPersonaName,
           displayPersonaName,
           loading,
           error,
@@ -233,7 +365,7 @@ function DashboardLayout({
         >
           <div className="sticky top-28 space-y-4">
             <Sidebar
-              selectedPersonaName={selectedPersonaName}
+              selectedPersonaName={effectiveSelectedPersonaName}
               onNavigate={() => setSidebarOpen(false)}
             />
           </div>
@@ -258,7 +390,7 @@ function DashboardLayout({
 
               <div className="space-y-4">
                 <Sidebar
-                  selectedPersonaName={selectedPersonaName}
+                  selectedPersonaName={effectiveSelectedPersonaName}
                   onNavigate={() => setSidebarOpen(false)}
                 />
               </div>
@@ -280,24 +412,26 @@ function DashboardLayout({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium opacity-70">Mode</span>
-                {loading ? (
+                {loading && effectivePersonas.length === 0 ? (
                   <span className="text-sm">Loading...</span>
+                ) : effectivePersonas.length > 0 ? (
+                  <div className="flex flex-col gap-1">
+                    <select
+                      className="select select-bordered rounded-2xl"
+                      value={effectiveSelectedPersona}
+                      onChange={handlePersonaChange}
+                    >
+                      {effectivePersonas.map((persona) => (
+                        <option key={persona._id} value={persona._id}>
+                          {persona.name === "Personal" ? "Finance" : persona.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 ) : error ? (
                   <span className="text-sm text-error">{error}</span>
-                ) : personas.length === 0 ? (
-                  <span className="text-sm">No personas found</span>
                 ) : (
-                  <select
-                    className="select select-bordered rounded-2xl"
-                    value={selectedPersona}
-                    onChange={handlePersonaChange}
-                  >
-                    {personas.map((persona) => (
-                      <option key={persona._id} value={persona._id}>
-                        {persona.name === "Personal" ? "Finance" : persona.name}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="text-sm">No personas found</span>
                 )}
               </div>
 

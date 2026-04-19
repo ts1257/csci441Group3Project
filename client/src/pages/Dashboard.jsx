@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import TaskManager from "../components/dashboard/TaskManager";
 import FinanceSection from "../components/dashboard/FinanceSection";
+import useOfflineTasks from "../hooks/useOfflineTasks";
 
 function Dashboard() {
   return (
@@ -38,58 +39,19 @@ function StandardDashboardContent({
   selectedPersonaName,
   displayPersonaName,
 }) {
-  const [tasks, setTasks] = useState([]);
-  const [loadingStats, setLoadingStats] = useState(false);
-
-  useEffect(() => {
-    const fetchTasks = async () => {
-      if (!selectedPersona) {
-        setTasks([]);
-        return;
-      }
-
-      try {
-        setLoadingStats(true);
-
-        const token = localStorage.getItem("token");
-
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/tasks`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Failed to fetch tasks");
-        }
-
-        const taskList = Array.isArray(data)
-          ? data
-          : Array.isArray(data.tasks)
-            ? data.tasks
-            : Array.isArray(data.data)
-              ? data.data
-              : [];
-
-        const filteredTasks = taskList.filter((task) => {
-          return task.persona === selectedPersonaName?.toLowerCase().trim();
-        });
-
-        setTasks(filteredTasks);
-      } catch {
-        setTasks([]);
-      } finally {
-        setLoadingStats(false);
-      }
-    };
-
-    fetchTasks();
-  }, [selectedPersona]);
+  const {
+    tasks,
+    loading,
+    error,
+    isOffline,
+    syncStatus,
+    pendingChangesCount,
+    addTask,
+    updateTask,
+    completeTask,
+    deleteTask,
+    refreshTasks,
+  } = useOfflineTasks(selectedPersonaName);
 
   const parseLocalDate = (dateString) => {
     if (!dateString) return null;
@@ -139,35 +101,45 @@ function StandardDashboardContent({
     <>
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
-          <p className="text-sm opacity-60">Today</p>
-          <h3 className="mt-3 text-4xl font-bold">
-            {loadingStats ? "..." : overviewStats.today}
-          </h3>
-        </div>
+            <p className="text-sm opacity-60">Today</p>
+            <h3 className="mt-3 text-4xl font-bold">
+              {loading ? "..." : overviewStats.today}
+            </h3>
+          </div>
 
         <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
-          <p className="text-sm opacity-60">Upcoming</p>
-          <h3 className="mt-3 text-4xl font-bold">
-            {loadingStats ? "..." : overviewStats.upcoming}
-          </h3>
-        </div>
+            <p className="text-sm opacity-60">Upcoming</p>
+            <h3 className="mt-3 text-4xl font-bold">
+              {loading ? "..." : overviewStats.upcoming}
+            </h3>
+          </div>
 
         <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
-          <p className="text-sm opacity-60">Overdue</p>
-          <h3 className="mt-3 text-4xl font-bold">
-            {loadingStats ? "..." : overviewStats.overdue}
-          </h3>
+            <p className="text-sm opacity-60">Overdue</p>
+            <h3 className="mt-3 text-4xl font-bold">
+              {loading ? "..." : overviewStats.overdue}
+            </h3>
+          </div>
         </div>
-      </div>
 
-      <TaskManager
-        selectedPersona={selectedPersona}
-        selectedPersonaName={selectedPersonaName}
-        key={displayPersonaName}
-        onTasksChange={(newTasks) => setTasks(newTasks)}
-      />
-    </>
-  );
+        <TaskManager
+          selectedPersona={selectedPersona}
+          selectedPersonaName={selectedPersonaName}
+          key={displayPersonaName}
+          tasks={tasks}
+          tasksLoading={loading}
+          tasksError={error}
+          isOffline={isOffline}
+          syncStatus={syncStatus}
+          pendingChangesCount={pendingChangesCount}
+          addTask={addTask}
+          updateTask={updateTask}
+          completeTask={completeTask}
+          deleteTask={deleteTask}
+          refreshTasks={refreshTasks}
+        />
+      </>
+    );
 }
 
 function FinanceDashboardContent() {
