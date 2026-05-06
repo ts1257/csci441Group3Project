@@ -1,4 +1,12 @@
 import Persona from "../models/Persona.js";
+import User from "../models/User.js";
+
+const ADMIN_PERSONA = {
+  name: "Admin",
+  description:
+    "Admin mode for managing users, system records, and application data",
+  color: "#111827",
+};
 
 const DEFAULT_PERSONAS = [
   {
@@ -30,20 +38,37 @@ const DEFAULT_PERSONAS = [
 ];
 
 async function ensureDefaultPersonas(userId) {
+  const user = await User.findById(userId).select("role personas");
+  const isAdmin = user?.role === "admin";
+  const expectedPersonas = isAdmin
+    ? [ADMIN_PERSONA, ...DEFAULT_PERSONAS]
+    : DEFAULT_PERSONAS;
+
+  if (!isAdmin) {
+    await Persona.deleteMany({ user: userId, name: /^admin$/i });
+  }
+
   const existingPersonas = await Persona.find({ user: userId });
   const existingNames = new Set(
     existingPersonas.map((persona) => persona.name.toLowerCase().trim()),
   );
 
-  const missingPersonas = DEFAULT_PERSONAS.filter(
-    (persona) => !existingNames.has(persona.name.toLowerCase()),
-  ).map((persona) => ({
-    ...persona,
-    user: userId,
-  }));
+  const missingPersonas = expectedPersonas
+    .filter((persona) => !existingNames.has(persona.name.toLowerCase()))
+    .map((persona) => ({
+      ...persona,
+      user: userId,
+    }));
 
   if (missingPersonas.length > 0) {
     await Persona.insertMany(missingPersonas);
+  }
+
+  if (user) {
+    user.personas = isAdmin
+      ? ["admin", "student", "work", "finance", "wellness", "travel"]
+      : ["student", "work", "finance", "wellness", "travel"];
+    await user.save();
   }
 }
 

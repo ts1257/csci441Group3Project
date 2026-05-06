@@ -14,14 +14,19 @@ function Dashboard() {
       travelSubtitle="Track trip tasks based on each trip start date."
       financeTitle="Finance Dashboard"
       financeSubtitle="Track balance and pending payments for Finance mode."
+      adminTitle="Admin Dashboard"
+      adminSubtitle="Monitor users, tasks, and system records across the planner."
     >
       {({
         selectedPersona,
         selectedPersonaName,
+        isAdmin,
         isFinance,
         displayPersonaName,
       }) =>
-        isFinance ? (
+        isAdmin ? (
+          <AdminDashboardContent />
+        ) : isFinance ? (
           <FinanceDashboardContent />
         ) : (
           <StandardDashboardContent
@@ -32,6 +37,110 @@ function Dashboard() {
         )
       }
     </DashboardLayout>
+  );
+}
+
+function AdminDashboardContent() {
+  const [stats, setStats] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/admin/stats`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to load admin stats");
+        }
+
+        setStats(data.stats || data.data || data);
+      } catch (err) {
+        setError(err.message || "Failed to load admin stats");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+  }, []);
+
+  const activityCounts = useMemo(() => {
+    return [
+      { label: "Users", value: stats?.totalUsers ?? 0 },
+      { label: "Admins", value: stats?.totalAdmins ?? 0 },
+      { label: "Tasks", value: stats?.totalTasks ?? 0 },
+      { label: "Courses", value: stats?.totalCourses ?? 0 },
+      { label: "Projects", value: stats?.totalProjects ?? 0 },
+      { label: "Habits", value: stats?.totalHabits ?? 0 },
+      { label: "Trips", value: stats?.totalTrips ?? 0 },
+      { label: "Finance Records", value: stats?.totalRecords ?? 0 },
+      { label: "Planned Payments", value: stats?.totalPlannedPayments ?? 0 },
+      { label: "Categories", value: stats?.totalCategories ?? 0 },
+      { label: "Personas", value: stats?.totalPersonas ?? 0 },
+      { label: "System Records", value: stats?.totalSystemItems ?? 0 },
+    ];
+  }, [stats]);
+
+  const systemChartData = useMemo(() => {
+    return activityCounts.filter((item) => item.label !== "System Records");
+  }, [activityCounts]);
+
+  return (
+    <div className="space-y-6">
+      {error && <div className="alert alert-error rounded-2xl">{error}</div>}
+
+      <section className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+        <div className="mb-5">
+          <h2 className="text-2xl font-bold md:text-3xl">
+            System Activity Counts
+          </h2>
+          <p className="mt-1 text-sm opacity-70">
+            Monitor the total records stored across users, personas, tasks,
+            trips, habits, and finance modules.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {activityCounts.map((item) => (
+            <StatRow
+              key={item.label}
+              label={item.label}
+              value={item.value}
+              loading={loading}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+        <SectionHeader
+          title="System Activity Chart"
+          subtitle="Visual comparison of the main data records across the application."
+        />
+        <SimpleBarChart data={systemChartData} loading={loading} />
+      </section>
+    </div>
+  );
+}
+
+function StatRow({ label, value, loading }) {
+  return (
+    <div className="rounded-2xl bg-base-200 p-4">
+      <p className="text-sm opacity-60">{label}</p>
+      <p className="mt-1 text-2xl font-bold">{loading ? "..." : value}</p>
+    </div>
   );
 }
 
@@ -191,6 +300,84 @@ function StandardDashboardContent({
     ];
   }, [tasks, habits, trips, isWellness, isTravel, today]);
 
+  const analyticsContent = useMemo(() => {
+    if (isWellness) {
+      return {
+        title: "Wellness Progress Analytics",
+        subtitle:
+          "Track daily habit completion and medicine reminder progress.",
+        completionTitle: "Habit Completion",
+        completionValue: getPercentage(
+          habits.filter((habit) => habit.completedToday).length,
+          habits.length,
+        ),
+        barData: habits.map((habit) => ({
+          label: habit.name,
+          value: Math.min(
+            Number(habit.progress) || 0,
+            Number(habit.goal) || Number(habit.progress) || 0,
+          ),
+          total: Number(habit.goal) || Number(habit.progress) || 1,
+          detail:
+            `${habit.progress || 0}/${habit.goal || 0} ${habit.unit || ""}`.trim(),
+        })),
+      };
+    }
+
+    if (isTravel) {
+      const checklistItems = trips.flatMap((trip) => trip.checklist || []);
+      return {
+        title: "Travel Checklist Analytics",
+        subtitle: "View checklist progress across upcoming and active trips.",
+        completionTitle: "Checklist Completion",
+        completionValue: getPercentage(
+          checklistItems.filter((item) => item.completed).length,
+          checklistItems.length,
+        ),
+        barData: trips.map((trip) => {
+          const items = trip.checklist || [];
+          const completed = items.filter((item) => item.completed).length;
+          return {
+            label: trip.tripName,
+            value: completed,
+            total: items.length || 1,
+            detail: `${completed}/${items.length} done`,
+          };
+        }),
+      };
+    }
+
+    const completedTasks = tasks.filter(
+      (task) => task.status === "completed",
+    ).length;
+    return {
+      title: `${displayPersonaName || "Persona"} Productivity Analytics`,
+      subtitle:
+        "View task completion and workload distribution for the active persona.",
+      completionTitle: "Task Completion",
+      completionValue: getPercentage(completedTasks, tasks.length),
+      barData: [
+        { label: "Completed", value: completedTasks },
+        {
+          label: "Pending",
+          value: tasks.filter((task) => task.status !== "completed").length,
+        },
+        {
+          label: "High Priority",
+          value: tasks.filter((task) => task.priority === "High").length,
+        },
+        {
+          label: "Medium Priority",
+          value: tasks.filter((task) => task.priority === "Medium").length,
+        },
+        {
+          label: "Low Priority",
+          value: tasks.filter((task) => task.priority === "Low").length,
+        },
+      ],
+    };
+  }, [tasks, habits, trips, isWellness, isTravel, displayPersonaName]);
+
   return (
     <>
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -206,6 +393,15 @@ function StandardDashboardContent({
           </div>
         ))}
       </div>
+
+      <AnalyticsSection
+        title={analyticsContent.title}
+        subtitle={analyticsContent.subtitle}
+        completionTitle={analyticsContent.completionTitle}
+        completionValue={analyticsContent.completionValue}
+        barData={analyticsContent.barData}
+        loading={loadingStats}
+      />
 
       {isTravel ? (
         <TravelDashboardTasks trips={trips} setTrips={setTrips} />
@@ -573,11 +769,49 @@ function FinanceDashboardContent() {
       .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
 
     return {
+      income,
+      expense,
       balance: income - expense,
       pendingTotal,
       overdueTotal,
+      paidPayments: plannedPayments.filter(
+        (payment) => payment.status === "paid",
+      ).length,
+      pendingPayments: plannedPayments.filter(
+        (payment) => payment.status !== "paid",
+      ).length,
     };
   }, [records, plannedPayments]);
+
+  const financeChartData = useMemo(() => {
+    return [
+      {
+        label: "Income",
+        value: financeStats.income,
+        detail: `$${financeStats.income.toFixed(2)}`,
+      },
+      {
+        label: "Expenses",
+        value: financeStats.expense,
+        detail: `$${financeStats.expense.toFixed(2)}`,
+      },
+      {
+        label: "Pending",
+        value: financeStats.pendingTotal,
+        detail: `$${financeStats.pendingTotal.toFixed(2)}`,
+      },
+      {
+        label: "Overdue",
+        value: financeStats.overdueTotal,
+        detail: `$${financeStats.overdueTotal.toFixed(2)}`,
+      },
+    ];
+  }, [financeStats]);
+
+  const paymentCompletion = getPercentage(
+    financeStats.paidPayments,
+    plannedPayments.length,
+  );
 
   return (
     <>
@@ -604,6 +838,14 @@ function FinanceDashboardContent() {
         </div>
       </div>
 
+      <AnalyticsSection
+        title="Finance Analytics"
+        subtitle="Compare income, expenses, pending payments, and paid payment progress."
+        completionTitle="Paid Payments"
+        completionValue={paymentCompletion}
+        barData={financeChartData}
+      />
+
       <FinanceSection
         onDataChange={({ records: newRecords, payments: newPayments }) => {
           if (newRecords) setRecords(newRecords);
@@ -612,6 +854,116 @@ function FinanceDashboardContent() {
       />
     </>
   );
+}
+
+function AnalyticsSection({
+  title,
+  subtitle,
+  completionTitle,
+  completionValue,
+  barData,
+  loading = false,
+}) {
+  return (
+    <section className="mb-6 rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
+      <SectionHeader title={title} subtitle={subtitle} />
+      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+        <ProgressRing
+          title={completionTitle}
+          value={completionValue}
+          loading={loading}
+        />
+        <SimpleBarChart data={barData} loading={loading} />
+      </div>
+    </section>
+  );
+}
+
+function SectionHeader({ title, subtitle }) {
+  return (
+    <div className="mb-5">
+      <h2 className="text-2xl font-bold md:text-3xl">{title}</h2>
+      <p className="mt-1 text-sm opacity-70">{subtitle}</p>
+    </div>
+  );
+}
+
+function ProgressRing({ title, value, loading }) {
+  const safeValue = Number.isFinite(value)
+    ? Math.max(0, Math.min(value, 100))
+    : 0;
+
+  return (
+    <div className="flex flex-col items-center justify-center rounded-3xl bg-base-200 p-6 text-center">
+      <div
+        className="grid h-36 w-36 place-items-center rounded-full text-primary"
+        style={{
+          background: `conic-gradient(currentColor ${safeValue * 3.6}deg, var(--color-base-300) 0deg)`,
+        }}
+      >
+        <div className="grid h-28 w-28 place-items-center rounded-full bg-base-100">
+          <span className="text-3xl font-bold">
+            {loading ? "..." : `${safeValue}%`}
+          </span>
+        </div>
+      </div>
+      <p className="mt-4 font-semibold">{title}</p>
+      <p className="mt-1 text-sm opacity-70">Completion rate</p>
+    </div>
+  );
+}
+
+function SimpleBarChart({ data, loading }) {
+  const cleanedData = Array.isArray(data) ? data : [];
+  const maxValue = Math.max(
+    ...cleanedData.map((item) => Number(item.total || item.value) || 0),
+    1,
+  );
+
+  if (!loading && cleanedData.length === 0) {
+    return (
+      <div className="rounded-3xl bg-base-200 p-5">
+        <p className="opacity-70">No chart data available yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-3xl bg-base-200 p-5">
+      <div className="space-y-4">
+        {loading ? (
+          <p className="opacity-70">Loading chart...</p>
+        ) : (
+          cleanedData.map((item) => {
+            const value = Number(item.value) || 0;
+            const itemTotal = Number(item.total) || maxValue;
+            const width =
+              itemTotal > 0 ? Math.min((value / itemTotal) * 100, 100) : 0;
+
+            return (
+              <div key={item.label}>
+                <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium">{item.label}</span>
+                  <span className="opacity-70">{item.detail || value}</span>
+                </div>
+                <div className="h-4 overflow-hidden rounded-full bg-base-300">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function getPercentage(value, total) {
+  if (!total || total <= 0) return 0;
+  return Math.round((value / total) * 100);
 }
 
 function getChecklistStats(trips, today) {

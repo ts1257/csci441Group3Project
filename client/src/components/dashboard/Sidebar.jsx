@@ -78,6 +78,7 @@ function Sidebar({ selectedPersonaName, onNavigate }) {
   }, []);
 
   const persona = selectedPersonaName?.toLowerCase().trim();
+  const isAdmin = persona === "admin";
   const isStudent = persona === "student";
   const isWork = persona === "work";
   const isFinance = persona === "personal" || persona === "finance";
@@ -162,6 +163,31 @@ function Sidebar({ selectedPersonaName, onNavigate }) {
               {renderLabel("Dashboard")}
             </NavLink>
           </li>
+
+          {isAdmin && (
+            <>
+              <li>
+                <NavLink
+                  to="/dashboard/admin/users"
+                  className={navClass}
+                  onClick={onNavigate}
+                >
+                  <Icon icon={faUser} />
+                  {renderLabel("Users")}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/dashboard/admin/tasks"
+                  className={navClass}
+                  onClick={onNavigate}
+                >
+                  <Icon icon={faListCheck} />
+                  {renderLabel("Manage Data")}
+                </NavLink>
+              </li>
+            </>
+          )}
 
           {isStudent && (
             <li>
@@ -261,16 +287,18 @@ function Sidebar({ selectedPersonaName, onNavigate }) {
             </>
           )}
 
-          <li>
-            <NavLink
-              to="/dashboard/calendar"
-              className={navClass}
-              onClick={onNavigate}
-            >
-              <Icon icon={faCalendar} />
-              {renderLabel("Calendar")}
-            </NavLink>
-          </li>
+          {!isAdmin && (
+            <li>
+              <NavLink
+                to="/dashboard/calendar"
+                className={navClass}
+                onClick={onNavigate}
+              >
+                <Icon icon={faCalendar} />
+                {renderLabel("Calendar")}
+              </NavLink>
+            </li>
+          )}
         </ul>
       </div>
 

@@ -13,6 +13,8 @@ function DashboardLayout({
   workSubtitle = null,
   wellnessSubtitle = null,
   travelSubtitle = null,
+  adminTitle = null,
+  adminSubtitle = null,
 }) {
   const navigate = useNavigate();
 
@@ -105,13 +107,13 @@ function DashboardLayout({
               ? data.data
               : [];
 
-        // Sort personas in the project/report order
         const personaOrder = {
-          Student: 0,
-          Work: 1,
-          Finance: 2,
-          Wellness: 3,
-          Travel: 4,
+          Admin: 0,
+          Student: 1,
+          Work: 2,
+          Finance: 3,
+          Wellness: 4,
+          Travel: 5,
         };
         const sortedPersonas = personaList.sort(
           (a, b) =>
@@ -125,22 +127,46 @@ function DashboardLayout({
 
         let initialPersona = null;
 
-        if (savedPersonaId) {
-          initialPersona = personaList.find(
-            (persona) => persona._id === savedPersonaId,
-          );
-        }
+        const restrictedPersonaName =
+          restrictTo === "admin"
+            ? "admin"
+            : restrictTo === "student"
+              ? "student"
+              : restrictTo === "work"
+                ? "work"
+                : restrictTo === "wellness"
+                  ? "wellness"
+                  : restrictTo === "travel"
+                    ? "travel"
+                    : restrictTo === "finance"
+                      ? "finance"
+                      : null;
 
-        if (!initialPersona && savedPersonaName) {
-          initialPersona = personaList.find(
+        if (restrictedPersonaName) {
+          initialPersona = sortedPersonas.find(
             (persona) =>
-              persona.name?.toLowerCase().trim() ===
-              savedPersonaName.toLowerCase().trim(),
+              persona.name?.toLowerCase().trim() === restrictedPersonaName,
           );
         }
 
-        if (!initialPersona && personaList.length > 0) {
-          initialPersona = personaList[0];
+        const savedPersonaIsAvailableById = savedPersonaId
+          ? sortedPersonas.find((persona) => persona._id === savedPersonaId)
+          : null;
+        const savedPersonaIsAvailableByName = savedPersonaName
+          ? sortedPersonas.find(
+              (persona) =>
+                persona.name?.toLowerCase().trim() ===
+                savedPersonaName.toLowerCase().trim(),
+            )
+          : null;
+
+        initialPersona =
+          initialPersona ||
+          savedPersonaIsAvailableById ||
+          savedPersonaIsAvailableByName;
+
+        if (!initialPersona && sortedPersonas.length > 0) {
+          initialPersona = sortedPersonas[0];
         }
 
         if (initialPersona) {
@@ -158,22 +184,26 @@ function DashboardLayout({
     };
 
     fetchPersonas();
-  }, []);
+  }, [restrictTo]);
 
   const normalizedPersona = selectedPersonaName?.toLowerCase().trim();
+  const isAdmin = normalizedPersona === "admin";
   const isFinance =
     normalizedPersona === "personal" || normalizedPersona === "finance";
 
   const displayPersonaName = useMemo(() => {
+    if (isAdmin) return "Admin";
     return isFinance ? "Finance" : selectedPersonaName;
-  }, [isFinance, selectedPersonaName]);
+  }, [isAdmin, isFinance, selectedPersonaName]);
 
   useEffect(() => {
     if (!restrictTo || !selectedPersonaName) return;
 
     let allowed = false;
 
-    if (restrictTo === "student") {
+    if (restrictTo === "admin") {
+      allowed = isAdmin;
+    } else if (restrictTo === "student") {
       allowed = normalizedPersona === "student";
     } else if (restrictTo === "work") {
       allowed = normalizedPersona === "work";
@@ -190,7 +220,14 @@ function DashboardLayout({
     if (!allowed) {
       navigate("/dashboard", { replace: true });
     }
-  }, [restrictTo, selectedPersonaName, normalizedPersona, isFinance, navigate]);
+  }, [
+    restrictTo,
+    selectedPersonaName,
+    normalizedPersona,
+    isAdmin,
+    isFinance,
+    navigate,
+  ]);
 
   const handlePersonaChange = (e) => {
     const personaId = e.target.value;
@@ -207,23 +244,27 @@ function DashboardLayout({
   };
 
   const resolvedTitle =
-    isFinance && financeTitle
-      ? financeTitle
-      : displayPersonaName
-        ? `${displayPersonaName} ${title}`
-        : title;
+    isAdmin && adminTitle
+      ? adminTitle
+      : isFinance && financeTitle
+        ? financeTitle
+        : displayPersonaName
+          ? `${displayPersonaName} ${title}`
+          : title;
   const resolvedSubtitle =
-    isFinance && financeSubtitle
-      ? financeSubtitle
-      : normalizedPersona === "student" && studentSubtitle
-        ? studentSubtitle
-        : normalizedPersona === "work" && workSubtitle
-          ? workSubtitle
-          : normalizedPersona === "wellness" && wellnessSubtitle
-            ? wellnessSubtitle
-            : normalizedPersona === "travel" && travelSubtitle
-              ? travelSubtitle
-              : subtitle;
+    isAdmin && adminSubtitle
+      ? adminSubtitle
+      : isFinance && financeSubtitle
+        ? financeSubtitle
+        : normalizedPersona === "student" && studentSubtitle
+          ? studentSubtitle
+          : normalizedPersona === "work" && workSubtitle
+            ? workSubtitle
+            : normalizedPersona === "wellness" && wellnessSubtitle
+              ? wellnessSubtitle
+              : normalizedPersona === "travel" && travelSubtitle
+                ? travelSubtitle
+                : subtitle;
 
   const content =
     typeof children === "function"
@@ -235,6 +276,7 @@ function DashboardLayout({
           displayPersonaName,
           loading,
           error,
+          isAdmin,
           isFinance,
         })
       : children;

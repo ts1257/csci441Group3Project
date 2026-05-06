@@ -11,6 +11,7 @@ import categoryRoutes from "./routes/categoryRoutes.js";
 import recordRoutes from "./routes/recordRoutes.js";
 import habitRoutes from "./routes/habitRoutes.js";
 import tripRoutes from "./routes/tripRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 
 const app = express();
@@ -43,6 +44,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/records", recordRoutes);
 app.use("/api/habits", habitRoutes);
 app.use("/api/trips", tripRoutes);
+app.use("/api/admin", adminRoutes);
 
 // 404 handler
 app.use(notFound);

@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import AdminRoute from "./routes/AdminRoute";
 import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
 import Courses from "./pages/Courses";
@@ -16,6 +17,8 @@ import Category from "./pages/Category";
 import Projects from "./pages/Projects";
 import Habits from "./pages/Habits";
 import Trips from "./pages/Trips";
+import AdminUsers from "./pages/AdminUsers";
+import AdminTasks from "./pages/AdminTasks";
 
 function App() {
   return (
@@ -104,6 +107,26 @@ function App() {
             element={
               <ProtectedRoute>
                 <Trips />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/admin/users"
+            element={
+              <ProtectedRoute>
+                <AdminRoute>
+                  <AdminUsers />
+                </AdminRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/admin/tasks"
+            element={
+              <ProtectedRoute>
+                <AdminRoute>
+                  <AdminTasks />
+                </AdminRoute>
               </ProtectedRoute>
             }
           />

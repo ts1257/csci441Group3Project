@@ -19,10 +19,15 @@ const userSchema = new mongoose.Schema(
       required: [true, "Password is required"],
       minlength: 6,
     },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
     personas: {
       type: [String],
-      enum: ["student", "work", "finance"],
-      default: ["student", "work", "finance"],
+      enum: ["admin", "student", "work", "finance", "wellness", "travel"],
+      default: ["student", "work", "finance", "wellness", "travel"],
     },
   },
   {
