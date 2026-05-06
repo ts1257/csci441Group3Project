@@ -19,7 +19,9 @@ export async function registerUser(req, res, next) {
       });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const existingUser = await User.findOne({
+      email: email.toLowerCase().trim(),
+    });
 
     if (existingUser) {
       return res.status(409).json({
@@ -54,6 +56,20 @@ export async function registerUser(req, res, next) {
         name: "Finance",
         description: "Finance mode for managing budgets, records, and payments",
         color: "#f59e0b",
+      },
+      {
+        user: user._id,
+        name: "Wellness",
+        description:
+          "Wellness mode for tracking health, rest, and self-care tasks",
+        color: "#ef4444",
+      },
+      {
+        user: user._id,
+        name: "Travel",
+        description:
+          "Travel mode for organizing trips, transit tasks, and travel plans",
+        color: "#8b5cf6",
       },
     ];
 

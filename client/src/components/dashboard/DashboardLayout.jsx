@@ -11,6 +11,8 @@ function DashboardLayout({
   financeSubtitle = null,
   studentSubtitle = null,
   workSubtitle = null,
+  wellnessSubtitle = null,
+  travelSubtitle = null,
 }) {
   const navigate = useNavigate();
 
@@ -103,8 +105,14 @@ function DashboardLayout({
               ? data.data
               : [];
 
-        // Sort personas: Student first, then Work, then Finance
-        const personaOrder = { Student: 0, Work: 1, Finance: 2 };
+        // Sort personas in the project/report order
+        const personaOrder = {
+          Student: 0,
+          Work: 1,
+          Finance: 2,
+          Wellness: 3,
+          Travel: 4,
+        };
         const sortedPersonas = personaList.sort(
           (a, b) =>
             (personaOrder[a.name] ?? 999) - (personaOrder[b.name] ?? 999),
@@ -171,6 +179,10 @@ function DashboardLayout({
       allowed = normalizedPersona === "work";
     } else if (restrictTo === "finance") {
       allowed = isFinance;
+    } else if (restrictTo === "wellness") {
+      allowed = normalizedPersona === "wellness";
+    } else if (restrictTo === "travel") {
+      allowed = normalizedPersona === "travel";
     } else if (restrictTo === "non-finance") {
       allowed = !isFinance;
     }
@@ -207,7 +219,11 @@ function DashboardLayout({
         ? studentSubtitle
         : normalizedPersona === "work" && workSubtitle
           ? workSubtitle
-          : subtitle;
+          : normalizedPersona === "wellness" && wellnessSubtitle
+            ? wellnessSubtitle
+            : normalizedPersona === "travel" && travelSubtitle
+              ? travelSubtitle
+              : subtitle;
 
   const content =
     typeof children === "function"

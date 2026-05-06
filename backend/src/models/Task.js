@@ -9,7 +9,7 @@ const taskSchema = new mongoose.Schema(
     },
     persona: {
       type: String,
-      enum: ["student", "work", "finance"],
+      enum: ["student", "work", "finance", "wellness", "travel"],
       required: [true, "Task persona is required"],
       default: "student",
     },
@@ -43,6 +43,21 @@ const taskSchema = new mongoose.Schema(
       default: "",
     },
     projectId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    taskType: {
+      type: String,
+      enum: ["general", "habit", "medicine", "checklist"],
+      default: "general",
+    },
+    reminderTime: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    tripId: {
       type: String,
       trim: true,
       default: "",

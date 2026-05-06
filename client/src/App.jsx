@@ -14,6 +14,8 @@ import Records from "./pages/Records";
 import PlannedPayments from "./pages/PlannedPayments";
 import Category from "./pages/Category";
 import Projects from "./pages/Projects";
+import Habits from "./pages/Habits";
+import Trips from "./pages/Trips";
 
 function App() {
   return (
@@ -86,6 +88,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Projects />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/habits"
+            element={
+              <ProtectedRoute>
+                <Habits />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/trips"
+            element={
+              <ProtectedRoute>
+                <Trips />
               </ProtectedRoute>
             }
           />

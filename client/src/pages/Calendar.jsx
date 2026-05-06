@@ -7,6 +7,7 @@ function Calendar() {
   const [tasksError, setTasksError] = useState("");
 
   const [plannedPayments, setPlannedPayments] = useState([]);
+  const [trips, setTrips] = useState([]);
 
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -88,6 +89,8 @@ function Calendar() {
           setTasksError={setTasksError}
           plannedPayments={plannedPayments}
           setPlannedPayments={setPlannedPayments}
+          trips={trips}
+          setTrips={setTrips}
           currentMonth={currentMonth}
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
@@ -116,6 +119,8 @@ function CalendarContent({
   setTasksError,
   plannedPayments,
   setPlannedPayments,
+  trips,
+  setTrips,
   currentMonth,
   selectedDate,
   setSelectedDate,
@@ -127,6 +132,9 @@ function CalendarContent({
   changeMonth,
   isSameDate,
 }) {
+  const normalizedPersona = selectedPersonaName?.toLowerCase().trim();
+  const isTravel = normalizedPersona === "travel";
+
   useEffect(() => {
     const fetchPayments = async () => {
       try {
@@ -153,8 +161,41 @@ function CalendarContent({
   }, [selectedPersonaName, setPlannedPayments]);
 
   useEffect(() => {
+    const fetchTrips = async () => {
+      if (!isTravel) {
+        setTrips([]);
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/trips`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        const data = await response.json();
+
+        if (response.ok) {
+          const list = Array.isArray(data)
+            ? data
+            : data.trips || data.data || [];
+          setTrips(list);
+        } else {
+          setTrips([]);
+        }
+      } catch {
+        setTrips([]);
+      }
+    };
+
+    fetchTrips();
+  }, [isTravel, setTrips]);
+
+  useEffect(() => {
     const fetchTasks = async () => {
-      if (!selectedPersona || isFinance) {
+      if (!selectedPersona || isFinance || isTravel) {
         setTasks([]);
         setTasksLoading(false);
         return;
@@ -203,7 +244,14 @@ function CalendarContent({
     };
 
     fetchTasks();
-  }, [selectedPersona, isFinance, setTasks, setTasksLoading, setTasksError]);
+  }, [
+    selectedPersona,
+    isFinance,
+    isTravel,
+    setTasks,
+    setTasksLoading,
+    setTasksError,
+  ]);
 
   const tasksByDate = useMemo(() => {
     const map = new Map();
@@ -259,6 +307,34 @@ function CalendarContent({
     return map;
   }, [plannedPayments, parseLocalDate, dateKey]);
 
+  const tripsByDate = useMemo(() => {
+    const map = new Map();
+
+    trips.forEach((trip) => {
+      if (!trip.startDate) return;
+
+      const localDate = parseLocalDate(trip.startDate);
+      const key = dateKey(localDate);
+
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+
+      map.get(key).push({
+        id: trip._id,
+        kind: "trip",
+        title: trip.tripName || "Trip",
+        description: trip.destination || "No destination",
+        dueDate: trip.startDate,
+        endDate: trip.endDate,
+        travelType: trip.travelType || "",
+        status: "Trip",
+      });
+    });
+
+    return map;
+  }, [trips, parseLocalDate, dateKey]);
+
   const calendarItemsByDate = useMemo(() => {
     const map = new Map();
 
@@ -269,12 +345,19 @@ function CalendarContent({
       return map;
     }
 
+    if (isTravel) {
+      tripsByDate.forEach((items, key) => {
+        map.set(key, items);
+      });
+      return map;
+    }
+
     tasksByDate.forEach((items, key) => {
       map.set(key, items);
     });
 
     return map;
-  }, [isFinance, plannedPaymentsByDate, tasksByDate]);
+  }, [isFinance, isTravel, plannedPaymentsByDate, tasksByDate, tripsByDate]);
 
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
@@ -318,6 +401,10 @@ function CalendarContent({
       });
     }
 
+    if (isTravel) {
+      return [...list].sort((a, b) => a.title.localeCompare(b.title));
+    }
+
     const priorityOrder = { high: 3, medium: 2, low: 1 };
 
     return [...list].sort((a, b) => {
@@ -325,7 +412,7 @@ function CalendarContent({
       const priorityB = priorityOrder[b.priority] || 0;
       return priorityB - priorityA;
     });
-  }, [selectedDate, calendarItemsByDate, isFinance, dateKey]);
+  }, [selectedDate, calendarItemsByDate, isFinance, isTravel, dateKey]);
 
   const monthTitle = currentMonth.toLocaleDateString(undefined, {
     month: "long",
@@ -333,7 +420,11 @@ function CalendarContent({
   });
 
   const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const selectedDateLabel = isFinance ? "Planned payments" : "Tasks";
+  const selectedDateLabel = isFinance
+    ? "Planned payments"
+    : isTravel
+      ? "Trips"
+      : "Tasks";
 
   const totalPlannedPayments = useMemo(
     () => plannedPayments.length,
@@ -350,6 +441,19 @@ function CalendarContent({
       );
     }).length;
   }, [plannedPayments, currentMonth, parseLocalDate]);
+
+  const totalTrips = useMemo(() => trips.length, [trips]);
+
+  const tripsThisMonth = useMemo(() => {
+    return trips.filter((trip) => {
+      if (!trip.startDate) return false;
+      const d = parseLocalDate(trip.startDate);
+      return (
+        d.getMonth() === currentMonth.getMonth() &&
+        d.getFullYear() === currentMonth.getFullYear()
+      );
+    }).length;
+  }, [trips, currentMonth, parseLocalDate]);
 
   const totalTasks = useMemo(() => tasks.length, [tasks]);
 
@@ -376,6 +480,18 @@ function CalendarContent({
           <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
             <p className="text-sm opacity-60">This Month</p>
             <h3 className="mt-3 text-4xl font-bold">{financeThisMonth}</h3>
+          </div>
+        </div>
+      ) : isTravel ? (
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+            <p className="text-sm opacity-60">Total Trips</p>
+            <h3 className="mt-3 text-4xl font-bold">{totalTrips}</h3>
+          </div>
+
+          <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
+            <p className="text-sm opacity-60">Trips This Month</p>
+            <h3 className="mt-3 text-4xl font-bold">{tripsThisMonth}</h3>
           </div>
         </div>
       ) : (
@@ -475,7 +591,7 @@ function CalendarContent({
                             key={item.id}
                             className="flex items-center gap-1 truncate rounded-lg bg-base-200 px-2 py-1 text-xs"
                           >
-                            {!isFinance ? (
+                            {!isFinance && !isTravel ? (
                               <span
                                 className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(
                                   item.priority,
@@ -546,7 +662,7 @@ function CalendarContent({
                             key={item.id}
                             className="flex items-center gap-1 text-xs"
                           >
-                            {!isFinance ? (
+                            {!isFinance && !isTravel ? (
                               <span
                                 className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(
                                   item.priority,
@@ -560,7 +676,12 @@ function CalendarContent({
                         ))}
                         {dayItems.length === 0 && (
                           <p className="text-xs opacity-50">
-                            No {isFinance ? "payments" : "tasks"}
+                            No{" "}
+                            {isFinance
+                              ? "payments"
+                              : isTravel
+                                ? "trips"
+                                : "tasks"}
                           </p>
                         )}
                       </div>
@@ -579,7 +700,7 @@ function CalendarContent({
             {selectedDateLabel} for {selectedDate.toLocaleDateString()}
           </h2>
 
-          {!isFinance && (
+          {!isFinance && !isTravel && (
             <div className="flex flex-wrap gap-3 text-xs sm:text-sm">
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-error" />
@@ -599,7 +720,8 @@ function CalendarContent({
 
         {selectedDateItems.length === 0 ? (
           <p className="opacity-70">
-            No {isFinance ? "planned payments" : "tasks"} for this date.
+            No {isFinance ? "planned payments" : isTravel ? "trips" : "tasks"}{" "}
+            for this date.
           </p>
         ) : (
           <div className="space-y-4">
@@ -615,8 +737,14 @@ function CalendarContent({
                       {item.description || "No description"}
                     </p>
                     <p className="mt-2 text-sm opacity-60">
-                      Due: {formatDate(item.dueDate)}
+                      {item.kind === "trip" ? "Start" : "Due"}:{" "}
+                      {formatDate(item.dueDate)}
                     </p>
+                    {item.kind === "trip" && item.endDate && (
+                      <p className="mt-1 text-sm opacity-60">
+                        End: {formatDate(item.endDate)}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -628,6 +756,15 @@ function CalendarContent({
                         <span className="badge badge-outline">
                           ${Number(item.amount || 0).toFixed(2)}
                         </span>
+                      </>
+                    ) : isTravel ? (
+                      <>
+                        <span className="badge badge-outline">Trip</span>
+                        {item.travelType && (
+                          <span className="badge badge-outline">
+                            {item.travelType}
+                          </span>
+                        )}
                       </>
                     ) : (
                       <>

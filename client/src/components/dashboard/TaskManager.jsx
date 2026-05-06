@@ -17,6 +17,7 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
   const normalizedPersona = selectedPersonaName?.toLowerCase().trim();
   const isStudent = normalizedPersona === "student";
   const isWork = normalizedPersona === "work";
+  const isWellness = normalizedPersona === "wellness";
 
   const getInitialTaskState = () => ({
     title: "",
@@ -26,6 +27,8 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     status: "todo",
     course: "",
     project: "",
+    taskType: "general",
+    reminderTime: "",
   });
 
   const [newTask, setNewTask] = useState(getInitialTaskState());
@@ -39,6 +42,8 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     status: "todo",
     course: "",
     project: "",
+    taskType: "general",
+    reminderTime: "",
   });
 
   const [courses, setCourses] = useState([]);
@@ -196,6 +201,11 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
       basePayload.projectId = taskData.project || "";
     }
 
+    if (isWellness) {
+      basePayload.taskType = taskData.taskType || "general";
+      basePayload.reminderTime = taskData.reminderTime || "";
+    }
+
     return basePayload;
   };
 
@@ -241,6 +251,8 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
         ...(data.task || data.data || data),
         courseId: payload.courseId || "",
         projectId: payload.projectId || "",
+        taskType: payload.taskType || "general",
+        reminderTime: payload.reminderTime || "",
       };
 
       if (createdTask.persona === normalizedPersona) {
@@ -277,6 +289,8 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
       status: task.status || "todo",
       course: task.courseId || "",
       project: task.projectId || "",
+      taskType: task.taskType || "general",
+      reminderTime: task.reminderTime || "",
     });
     setShowEditTaskModal(true);
   };
@@ -318,6 +332,8 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
         ...(data.task || data.data || data),
         courseId: payload.courseId || "",
         projectId: payload.projectId || "",
+        taskType: payload.taskType || "general",
+        reminderTime: payload.reminderTime || "",
       };
 
       setTasks((prev) => {
@@ -496,6 +512,20 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
       );
     }
 
+    if (isWellness) {
+      return (
+        <div className="mt-1 space-y-1 text-sm opacity-70">
+          <p>
+            Type:{" "}
+            {task.taskType === "medicine"
+              ? "Medicine Reminder"
+              : "General Wellness"}
+          </p>
+          {task.reminderTime && <p>Reminder: {task.reminderTime}</p>}
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -540,6 +570,41 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
               <option key={index} value={project} />
             ))}
           </datalist>
+        </div>
+      );
+    }
+
+    if (isWellness) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Wellness Task Type
+            </label>
+            <select
+              name="taskType"
+              value={taskState.taskType}
+              onChange={onChangeHandler}
+              className="select select-bordered w-full rounded-2xl"
+            >
+              <option value="general">General Wellness</option>
+              <option value="medicine">Medicine Reminder</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Reminder Time
+            </label>
+            <input
+              type="time"
+              name="reminderTime"
+              value={taskState.reminderTime}
+              onChange={onChangeHandler}
+              className="input input-bordered w-full rounded-2xl"
+              disabled={taskState.taskType !== "medicine"}
+            />
+          </div>
         </div>
       );
     }
@@ -932,14 +997,39 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
               {isStudent && (
                 <div>
                   <p className="text-sm opacity-60">Course</p>
-                  <p className="mt-1">{selectedTask.course || "Not set"}</p>
+                  <p className="mt-1">
+                    {selectedTask.courseId || selectedTask.course || "Not set"}
+                  </p>
                 </div>
               )}
 
               {isWork && (
                 <div>
                   <p className="text-sm opacity-60">Project</p>
-                  <p className="mt-1">{selectedTask.project || "Not set"}</p>
+                  <p className="mt-1">
+                    {selectedTask.projectId ||
+                      selectedTask.project ||
+                      "Not set"}
+                  </p>
+                </div>
+              )}
+
+              {isWellness && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-sm opacity-60">Task Type</p>
+                    <p className="mt-1">
+                      {selectedTask.taskType === "medicine"
+                        ? "Medicine Reminder"
+                        : "General Wellness"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm opacity-60">Reminder Time</p>
+                    <p className="mt-1">
+                      {selectedTask.reminderTime || "Not set"}
+                    </p>
+                  </div>
                 </div>
               )}
 

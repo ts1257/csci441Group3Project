@@ -9,6 +9,8 @@ import courseRoutes from "./routes/courseRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import recordRoutes from "./routes/recordRoutes.js";
+import habitRoutes from "./routes/habitRoutes.js";
+import tripRoutes from "./routes/tripRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 
 const app = express();
@@ -39,6 +41,8 @@ app.use("/api/courses", courseRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/records", recordRoutes);
+app.use("/api/habits", habitRoutes);
+app.use("/api/trips", tripRoutes);
 
 // 404 handler
 app.use(notFound);

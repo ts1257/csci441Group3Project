@@ -16,6 +16,8 @@ import {
   faUser,
   faRightFromBracket,
   faBriefcase,
+  faHeartPulse,
+  faPlane,
 } from "@fortawesome/free-solid-svg-icons";
 
 function Sidebar({ selectedPersonaName, onNavigate }) {
@@ -79,6 +81,8 @@ function Sidebar({ selectedPersonaName, onNavigate }) {
   const isStudent = persona === "student";
   const isWork = persona === "work";
   const isFinance = persona === "personal" || persona === "finance";
+  const isWellness = persona === "wellness";
+  const isTravel = persona === "travel";
 
   const displayPersonaName = isFinance
     ? "Finance"
@@ -172,7 +176,7 @@ function Sidebar({ selectedPersonaName, onNavigate }) {
             </li>
           )}
 
-          {(isStudent || isWork) && (
+          {(isStudent || isWork || isWellness || isTravel) && (
             <li>
               <NavLink
                 to="/dashboard/tasks"
@@ -181,6 +185,32 @@ function Sidebar({ selectedPersonaName, onNavigate }) {
               >
                 <Icon icon={faListCheck} />
                 {renderLabel("Tasks")}
+              </NavLink>
+            </li>
+          )}
+
+          {isWellness && (
+            <li>
+              <NavLink
+                to="/dashboard/habits"
+                className={navClass}
+                onClick={onNavigate}
+              >
+                <Icon icon={faHeartPulse} />
+                {renderLabel("Habits")}
+              </NavLink>
+            </li>
+          )}
+
+          {isTravel && (
+            <li>
+              <NavLink
+                to="/dashboard/trips"
+                className={navClass}
+                onClick={onNavigate}
+              >
+                <Icon icon={faPlane} />
+                {renderLabel("Trips")}
               </NavLink>
             </li>
           )}

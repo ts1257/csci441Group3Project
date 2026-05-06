@@ -2,7 +2,19 @@ import Task from "../models/Task.js";
 
 export async function createTask(req, res, next) {
   try {
-    const { title, description, dueDate, priority, status, persona, courseId, projectId } = req.body;
+    const {
+      title,
+      description,
+      dueDate,
+      priority,
+      status,
+      persona,
+      courseId,
+      projectId,
+      taskType,
+      reminderTime,
+      tripId,
+    } = req.body;
 
     if (!title || !persona) {
       return res.status(400).json({
@@ -20,6 +32,9 @@ export async function createTask(req, res, next) {
       status: status || "todo",
       courseId: courseId?.trim() || "",
       projectId: projectId?.trim() || "",
+      taskType: taskType || "general",
+      reminderTime: reminderTime?.trim() || "",
+      tripId: tripId?.trim() || "",
     });
 
     res.status(201).json({
@@ -56,7 +71,19 @@ export async function getTasks(req, res, next) {
 export async function updateTask(req, res, next) {
   try {
     const { id } = req.params;
-    const { title, description, dueDate, priority, status, persona, courseId, projectId } = req.body;
+    const {
+      title,
+      description,
+      dueDate,
+      priority,
+      status,
+      persona,
+      courseId,
+      projectId,
+      taskType,
+      reminderTime,
+      tripId,
+    } = req.body;
 
     const task = await Task.findOne({
       _id: id,
@@ -77,6 +104,9 @@ export async function updateTask(req, res, next) {
     if (status !== undefined) task.status = status;
     if (courseId !== undefined) task.courseId = courseId.trim();
     if (projectId !== undefined) task.projectId = projectId.trim();
+    if (taskType !== undefined) task.taskType = taskType;
+    if (reminderTime !== undefined) task.reminderTime = reminderTime.trim();
+    if (tripId !== undefined) task.tripId = tripId.trim();
 
     const updatedTask = await task.save();
 
