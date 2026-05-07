@@ -1,0 +1,17 @@
+{
+  "name": "Multi-Persona Planner",
+  "short_name": "Planner",
+  "description": "Offline-capable task, persona, finance, wellness, and travel planner.",
+  "start_url": "/dashboard/tasks",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

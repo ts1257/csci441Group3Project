@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import TaskManager from "../components/dashboard/TaskManager";
+import { fetchTasksWithOfflineFallback } from "../utils/offlineTasks";
+import {
+  queueCollectionUpdate,
+  saveCollectionItemToCache,
+} from "../utils/offlineCollections";
 
 const emptyChecklistForm = {
   tripId: "",
   text: "",
 };
+const TRIPS_CACHE_KEY = "mpp.trips.cache.v1";
 
 function Tasks() {
   return (
@@ -65,25 +71,10 @@ function StandardTasksContent({
       try {
         setLoadingStats(true);
         const token = localStorage.getItem("token");
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/tasks`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Failed to fetch tasks");
-        }
-
-        const taskList = Array.isArray(data)
-          ? data
-          : Array.isArray(data.tasks)
-            ? data.tasks
-            : Array.isArray(data.data)
-              ? data.data
-              : [];
+        const { tasks: taskList } = await fetchTasksWithOfflineFallback({
+          apiUrl: import.meta.env.VITE_API_URL,
+          token,
+        });
 
         setTasks(
           taskList.filter((task) => {
@@ -147,19 +138,37 @@ function TravelTasksContent() {
     try {
       setLoading(true);
       setError("");
+
+      if (!navigator.onLine) {
+        setTrips(readCachedTrips());
+        return;
+      }
+
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/trips`,
-        {
+
+      let response;
+      try {
+        response = await fetch(`${import.meta.env.VITE_API_URL}/api/trips`, {
           headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+        });
+      } catch {
+        setTrips(readCachedTrips());
+        return;
+      }
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to load trips");
-      setTrips(Array.isArray(data) ? data : data.trips || data.data || []);
+      const tripList = Array.isArray(data) ? data : data.trips || data.data || [];
+      setTrips(tripList);
+      cacheTrips(tripList);
     } catch (err) {
-      setError(err.message || "Failed to load trips");
-      setTrips([]);
+      const cachedTrips = readCachedTrips();
+      if (cachedTrips.length) {
+        setTrips(cachedTrips);
+      } else {
+        setError(err.message || "Failed to load trips");
+        setTrips([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -214,6 +223,17 @@ function TravelTasksContent() {
   const updateTripChecklist = async (trip, checklist, afterSuccess = null) => {
     try {
       setSubmitting(true);
+      const payload = { checklist };
+
+      if (!navigator.onLine) {
+        const updatedTrip = queueCollectionUpdate("trips", trip, payload);
+        setTrips((prev) =>
+          prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)),
+        );
+        afterSuccess?.();
+        return;
+      }
+
       const token = localStorage.getItem("token");
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/trips/${trip._id}`,
@@ -223,7 +243,7 @@ function TravelTasksContent() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ checklist }),
+          body: JSON.stringify(payload),
         },
       );
       const data = await response.json();
@@ -233,9 +253,18 @@ function TravelTasksContent() {
       setTrips((prev) =>
         prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)),
       );
+      saveCollectionItemToCache("trips", updatedTrip);
       afterSuccess?.();
     } catch (err) {
-      setError(err.message || "Failed to update checklist");
+      if (isNetworkFailure(err)) {
+        const updatedTrip = queueCollectionUpdate("trips", trip, { checklist });
+        setTrips((prev) =>
+          prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)),
+        );
+        afterSuccess?.();
+      } else {
+        setError(err.message || "Failed to update checklist");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -295,9 +324,9 @@ function TravelTasksContent() {
           </p>
         ) : (
           <div className="mt-6 space-y-4">
-            {trips.map((trip) => (
+            {trips.map((trip, tripIndex) => (
               <div
-                key={trip._id}
+                key={`${trip._id || trip.tripName}-${tripIndex}`}
                 className="rounded-3xl border border-base-300 p-5"
               >
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -318,7 +347,7 @@ function TravelTasksContent() {
                   <div className="mt-4 space-y-2">
                     {(trip.checklist || []).map((item, index) => (
                       <div
-                        key={`${trip._id}-${index}`}
+                        key={`${trip._id || trip.tripName}-${item._id || index}`}
                         className="flex items-center gap-3 rounded-2xl bg-base-200 px-4 py-3"
                       >
                         <input
@@ -416,6 +445,27 @@ function TravelTasksContent() {
         </div>
       )}
     </>
+  );
+}
+
+function readCachedTrips() {
+  try {
+    return JSON.parse(localStorage.getItem(TRIPS_CACHE_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function cacheTrips(trips) {
+  localStorage.setItem(TRIPS_CACHE_KEY, JSON.stringify(trips));
+}
+
+function isNetworkFailure(error) {
+  return (
+    error instanceof TypeError ||
+    /failed to fetch|networkerror|cors request did not succeed/i.test(
+      error?.message || "",
+    )
   );
 }
 

@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  deleteTaskFromCache,
+  fetchTasksWithOfflineFallback,
+  getClientSyncState,
+  queueCreateTask,
+  queueDeleteTask,
+  queueUpdateTask,
+  saveTaskToCache,
+  syncPendingTasks,
+} from "../../utils/offlineTasks";
 
 function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState("");
   const [activeTab, setActiveTab] = useState("Today");
+  const [syncState, setSyncState] = useState(getClientSyncState);
+  const [syncMessage, setSyncMessage] = useState("");
 
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
@@ -18,6 +30,7 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
   const isStudent = normalizedPersona === "student";
   const isWork = normalizedPersona === "work";
   const isWellness = normalizedPersona === "wellness";
+  const apiUrl = import.meta.env.VITE_API_URL;
 
   const getInitialTaskState = () => ({
     title: "",
@@ -56,6 +69,12 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
   useEffect(() => {
     const fetchCoursesAndProjects = async () => {
       try {
+        if (!navigator.onLine) {
+          setCourses(readCachedList("mpp.courses.names.v1"));
+          setProjects(readCachedList("mpp.projects.names.v1"));
+          return;
+        }
+
         const token = localStorage.getItem("token");
 
         const [coursesRes, projectsRes] = await Promise.all([
@@ -70,17 +89,21 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
         if (coursesRes.ok) {
           const data = await coursesRes.json();
           const list = Array.isArray(data) ? data : data.courses || [];
-          setCourses(list.map((c) => c.name));
+          const names = list.map((c) => c.name);
+          setCourses(names);
+          cacheList("mpp.courses.names.v1", names);
         }
 
         if (projectsRes.ok) {
           const data = await projectsRes.json();
           const list = Array.isArray(data) ? data : data.projects || [];
-          setProjects(list.map((p) => p.name));
+          const names = list.map((p) => p.name);
+          setProjects(names);
+          cacheList("mpp.projects.names.v1", names);
         }
       } catch {
-        setCourses([]);
-        setProjects([]);
+        setCourses(readCachedList("mpp.courses.names.v1"));
+        setProjects(readCachedList("mpp.projects.names.v1"));
       }
     };
 
@@ -114,57 +137,84 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     return dateValue;
   };
 
+  const applyTaskList = (taskList) => {
+    const filteredTasks = taskList.filter((task) => {
+      return task.persona === normalizedPersona;
+    });
+
+    setTasks(filteredTasks);
+    onTasksChange?.(filteredTasks);
+  };
+
+  const refreshTasks = async ({ showLoading = true } = {}) => {
+    if (!selectedPersona) {
+      setTasks([]);
+      onTasksChange?.([]);
+      return;
+    }
+
+    try {
+      if (showLoading) setTasksLoading(true);
+      setTasksError("");
+
+      const token = localStorage.getItem("token");
+      const { tasks: loadedTasks, source } = await fetchTasksWithOfflineFallback({
+        apiUrl,
+        token,
+      });
+
+      applyTaskList(loadedTasks);
+      setSyncState(getClientSyncState());
+      setSyncMessage(
+        source === "cache" ? "Offline changes are saved locally." : "",
+      );
+    } catch (err) {
+      setTasksError(err.message || "Failed to load tasks");
+    } finally {
+      if (showLoading) setTasksLoading(false);
+    }
+  };
+
+  const runSync = async () => {
+    if (!selectedPersona || !navigator.onLine) {
+      setSyncState(getClientSyncState());
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    const result = await syncPendingTasks({ apiUrl, token });
+    setSyncState(getClientSyncState());
+
+    if (result.synced > 0) {
+      setSyncMessage("Offline changes synced.");
+      await refreshTasks({ showLoading: false });
+    } else if (result.pendingCount > 0) {
+      setSyncMessage("Sync will retry when the connection is stable.");
+    }
+  };
+
   useEffect(() => {
-    const fetchTasks = async () => {
-      if (!selectedPersona) {
-        setTasks([]);
-        return;
-      }
+    refreshTasks();
+  }, [normalizedPersona]);
 
-      try {
-        setTasksLoading(true);
-        setTasksError("");
-
-        const token = localStorage.getItem("token");
-
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/tasks`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Failed to fetch tasks");
-        }
-
-        const taskList = Array.isArray(data)
-          ? data
-          : Array.isArray(data.tasks)
-            ? data.tasks
-            : Array.isArray(data.data)
-              ? data.data
-              : [];
-
-        const filteredTasks = taskList.filter((task) => {
-          return task.persona === normalizedPersona;
-        });
-
-        setTasks(filteredTasks);
-        onTasksChange?.(filteredTasks);
-      } catch (err) {
-        setTasksError(err.message || "Failed to load tasks");
-        setTasks([]);
-      } finally {
-        setTasksLoading(false);
-      }
+  useEffect(() => {
+    const handleOnline = () => {
+      setSyncMessage("Back online. Syncing saved changes...");
+      runSync();
+    };
+    const handleOffline = () => {
+      setSyncState(getClientSyncState());
+      setSyncMessage("Offline changes are saved locally.");
     };
 
-    fetchTasks();
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    runSync();
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, [normalizedPersona]);
 
   const handleTaskInputChange = (e) => {
@@ -229,8 +279,24 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
       const token = localStorage.getItem("token");
       const payload = buildPayload(newTask);
 
+      if (!navigator.onLine) {
+        const createdTask = queueCreateTask(payload);
+        if (createdTask.persona === normalizedPersona) {
+          setTasks((prev) => {
+            const next = [createdTask, ...prev];
+            onTasksChange?.(next);
+            return next;
+          });
+        }
+        setSyncState(getClientSyncState());
+        setSyncMessage("Task saved offline and queued for sync.");
+        setNewTask(getInitialTaskState());
+        setShowAddTaskModal(false);
+        return;
+      }
+
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/tasks`,
+        `${apiUrl}/api/tasks`,
         {
           method: "POST",
           headers: {
@@ -258,6 +324,7 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
       if (createdTask.persona === normalizedPersona) {
         setTasks((prev) => {
           const next = [createdTask, ...prev];
+          saveTaskToCache(createdTask);
           onTasksChange?.(next);
           return next;
         });
@@ -310,8 +377,28 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
       const token = localStorage.getItem("token");
       const payload = buildPayload(editingTask);
 
+      if (!navigator.onLine) {
+        const updatedTask = queueUpdateTask(selectedTask || editingTask, payload);
+        setTasks((prev) => {
+          const next = prev.map((item) =>
+            item._id === editingTask._id ? updatedTask : item,
+          );
+          onTasksChange?.(next);
+          return next;
+        });
+
+        if (selectedTask?._id === updatedTask._id) {
+          setSelectedTask(updatedTask);
+        }
+
+        setSyncState(getClientSyncState());
+        setSyncMessage("Task update saved offline and queued for sync.");
+        setShowEditTaskModal(false);
+        return;
+      }
+
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${editingTask._id}`,
+        `${apiUrl}/api/tasks/${editingTask._id}`,
         {
           method: "PATCH",
           headers: {
@@ -340,6 +427,7 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
         const next = prev.map((item) =>
           item._id === editingTask._id ? updatedTask : item,
         );
+        saveTaskToCache(updatedTask);
         onTasksChange?.(next);
         return next;
       });
@@ -359,19 +447,39 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
   const handleCompleteTask = async (task) => {
     try {
       const token = localStorage.getItem("token");
+      const payload = {
+        ...task,
+        status: "completed",
+      };
+
+      if (!navigator.onLine) {
+        const updatedTask = queueUpdateTask(task, payload);
+        setTasks((prev) => {
+          const next = prev.map((item) =>
+            item._id === task._id ? updatedTask : item,
+          );
+          onTasksChange?.(next);
+          return next;
+        });
+
+        if (selectedTask?._id === updatedTask._id) {
+          setSelectedTask(updatedTask);
+        }
+
+        setSyncState(getClientSyncState());
+        setSyncMessage("Completion saved offline and queued for sync.");
+        return;
+      }
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`,
+        `${apiUrl}/api/tasks/${task._id}`,
         {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            ...task,
-            status: "completed",
-          }),
+          body: JSON.stringify(payload),
         },
       );
 
@@ -387,6 +495,7 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
         const next = prev.map((item) =>
           item._id === task._id ? updatedTask : item,
         );
+        saveTaskToCache(updatedTask);
         onTasksChange?.(next);
         return next;
       });
@@ -406,8 +515,27 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
     try {
       const token = localStorage.getItem("token");
 
+      if (!navigator.onLine) {
+        queueDeleteTask(task);
+        setTasks((prev) => {
+          const next = prev.filter((item) => item._id !== task._id);
+          onTasksChange?.(next);
+          return next;
+        });
+
+        if (selectedTask?._id === task._id) {
+          setSelectedTask(null);
+          setShowViewTaskModal(false);
+          setShowEditTaskModal(false);
+        }
+
+        setSyncState(getClientSyncState());
+        setSyncMessage("Delete saved offline and queued for sync.");
+        return;
+      }
+
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`,
+        `${apiUrl}/api/tasks/${task._id}`,
         {
           method: "DELETE",
           headers: {
@@ -424,6 +552,7 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
 
       setTasks((prev) => {
         const next = prev.filter((item) => item._id !== task._id);
+        deleteTaskFromCache(task._id);
         onTasksChange?.(next);
         return next;
       });
@@ -634,6 +763,16 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
           </button>
         </div>
 
+        <div className="mb-5 flex flex-col gap-2 rounded-2xl border border-base-300 bg-base-200 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <span className="font-medium">
+            {syncState.online ? "Online" : "Offline"}
+            {syncState.pendingCount > 0
+              ? ` - ${syncState.pendingCount} pending sync`
+              : " - all changes synced"}
+          </span>
+          {syncMessage && <span className="opacity-70">{syncMessage}</span>}
+        </div>
+
         <div className="mb-6 flex flex-wrap gap-2">
           {tabs.map((tab) => (
             <button
@@ -693,6 +832,11 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
                         <span className="badge badge-outline">
                           {taskStatusLabel(task)}
                         </span>
+                        {task._syncStatus && (
+                          <span className="badge badge-warning">
+                            Pending Sync
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2">
@@ -1091,6 +1235,18 @@ function TaskManager({ selectedPersona, selectedPersonaName, onTasksChange }) {
       )}
     </>
   );
+}
+
+function readCachedList(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function cacheList(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
 }
 
 export default TaskManager;

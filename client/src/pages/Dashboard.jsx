@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import TaskManager from "../components/dashboard/TaskManager";
 import FinanceSection from "../components/dashboard/FinanceSection";
+import { fetchTasksWithOfflineFallback } from "../utils/offlineTasks";
+import { fetchRecordsWithOfflineFallback } from "../utils/offlineFinance";
 
 function Dashboard() {
   return (
@@ -170,63 +172,26 @@ function StandardDashboardContent({
       try {
         setLoadingStats(true);
         const token = localStorage.getItem("token");
-
-        const requests = [
-          fetch(`${import.meta.env.VITE_API_URL}/api/tasks`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ];
-
-        if (isWellness) {
-          requests.push(
-            fetch(`${import.meta.env.VITE_API_URL}/api/habits`, {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-          );
-        }
-
-        if (isTravel) {
-          requests.push(
-            fetch(`${import.meta.env.VITE_API_URL}/api/trips`, {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-          );
-        }
-
-        const responses = await Promise.all(requests);
-        const taskData = await responses[0].json();
-
-        if (!responses[0].ok) {
-          throw new Error(taskData.message || "Failed to fetch tasks");
-        }
-
-        const taskList = Array.isArray(taskData)
-          ? taskData
-          : Array.isArray(taskData.tasks)
-            ? taskData.tasks
-            : Array.isArray(taskData.data)
-              ? taskData.data
-              : [];
+        const { tasks: taskList } = await fetchTasksWithOfflineFallback({
+          apiUrl: import.meta.env.VITE_API_URL,
+          token,
+        });
 
         setTasks(taskList.filter((task) => task.persona === normalizedPersona));
 
-        if (isWellness && responses[1]) {
-          const habitData = await responses[1].json();
+        if (isWellness && navigator.onLine) {
+          const habitData = await fetchOptionalList("/api/habits", "habits", token);
           setHabits(
-            Array.isArray(habitData)
-              ? habitData
-              : habitData.habits || habitData.data || [],
+            habitData,
           );
         } else {
           setHabits([]);
         }
 
-        if (isTravel && responses[1]) {
-          const tripData = await responses[1].json();
+        if (isTravel && navigator.onLine) {
+          const tripData = await fetchOptionalList("/api/trips", "trips", token);
           setTrips(
-            Array.isArray(tripData)
-              ? tripData
-              : tripData.trips || tripData.data || [],
+            tripData,
           );
         } else {
           setTrips([]);
@@ -530,9 +495,9 @@ function WellnessDashboardHabits({ habits, setHabits }) {
         </p>
       ) : (
         <div className="mt-5 grid gap-3 md:grid-cols-2">
-          {habits.map((habit) => (
+          {habits.map((habit, index) => (
             <div
-              key={habit._id}
+              key={`${habit._id || habit.name}-${index}`}
               className="rounded-3xl border border-base-300 p-4"
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -662,9 +627,9 @@ function TravelDashboardTasks({ trips, setTrips }) {
         </p>
       ) : (
         <div className="space-y-4">
-          {filteredGroups.map(({ trip, items }) => (
+          {filteredGroups.map(({ trip, items }, groupIndex) => (
             <div
-              key={trip._id}
+              key={`${trip._id || trip.tripName}-${groupIndex}`}
               className="rounded-3xl border border-base-300 p-5"
             >
               <h3 className="text-lg font-semibold">{trip.tripName}</h3>
@@ -709,30 +674,19 @@ function FinanceDashboardContent() {
   const loadFinanceData = async () => {
     try {
       const token = localStorage.getItem("token");
+      const { records: recordList } = await fetchRecordsWithOfflineFallback({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+      });
+      setRecords(recordList);
 
-      const [recordsRes, paymentsRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/api/records`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/planned-payments`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      if (recordsRes.ok) {
-        const data = await recordsRes.json();
-        const list = Array.isArray(data)
-          ? data
-          : data.records || data.data || [];
-        setRecords(list);
-      }
-
-      if (paymentsRes.ok) {
-        const data = await paymentsRes.json();
-        const list = Array.isArray(data)
-          ? data
-          : data.plannedPayments || data.data || [];
-        setPlannedPayments(list);
+      if (navigator.onLine) {
+        const payments = await fetchOptionalList(
+          "/api/planned-payments",
+          "plannedPayments",
+          token,
+        );
+        setPlannedPayments(payments);
       }
     } catch {
       return;
@@ -1007,6 +961,23 @@ function parseLocalDate(dateString) {
 function formatDate(dateValue) {
   if (!dateValue) return "Not set";
   return parseLocalDate(dateValue).toLocaleDateString();
+}
+
+async function fetchOptionalList(path, listKey, token) {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json();
+
+    if (!response.ok) return [];
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data[listKey])) return data[listKey];
+    if (Array.isArray(data.data)) return data.data;
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 export default Dashboard;

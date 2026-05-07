@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
+import {
+  fetchCollectionWithOfflineFallback,
+  queueCollectionCreate,
+  queueCollectionDelete,
+  queueCollectionUpdate,
+  saveCollectionItemToCache,
+  syncPendingCollections,
+} from "../utils/offlineCollections";
 
 const emptyHabit = {
   name: "",
@@ -38,19 +46,14 @@ function HabitsContent() {
       setLoading(true);
       setError("");
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/habits`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message || "Failed to load habits");
-      setHabits(Array.isArray(data) ? data : data.habits || data.data || []);
+      const list = await fetchCollectionWithOfflineFallback({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+        collection: "habits",
+      });
+      setHabits(list);
     } catch (err) {
-      setError(err.message || "Failed to load habits");
-      setHabits([]);
+      setError(err.message || "Failed to load cached habits");
     } finally {
       setLoading(false);
     }
@@ -58,6 +61,18 @@ function HabitsContent() {
 
   useEffect(() => {
     loadHabits();
+    const sync = async () => {
+      const token = localStorage.getItem("token");
+      await syncPendingCollections({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+      });
+      await loadHabits();
+    };
+    const handleOnline = () => sync();
+    window.addEventListener("online", handleOnline);
+    sync();
+    return () => window.removeEventListener("online", handleOnline);
   }, []);
 
   const stats = useMemo(() => {
@@ -121,6 +136,21 @@ function HabitsContent() {
         ? `${import.meta.env.VITE_API_URL}/api/habits/${editingId}`
         : `${import.meta.env.VITE_API_URL}/api/habits`;
 
+      if (!navigator.onLine) {
+        if (editingId) {
+          const current = habits.find((habit) => habit._id === editingId);
+          const updated = queueCollectionUpdate("habits", current, form);
+          setHabits((prev) =>
+            prev.map((habit) => (habit._id === editingId ? updated : habit)),
+          );
+        } else {
+          const created = queueCollectionCreate("habits", form);
+          setHabits((prev) => [created, ...prev]);
+        }
+        closeModal();
+        return;
+      }
+
       const response = await fetch(url, {
         method: editingId ? "PATCH" : "POST",
         headers: {
@@ -142,9 +172,24 @@ function HabitsContent() {
       } else {
         setHabits((prev) => [savedHabit, ...prev]);
       }
+      saveCollectionItemToCache("habits", savedHabit);
       closeModal();
     } catch (err) {
-      setError(err.message || "Failed to save habit");
+      if (isNetworkFailure(err)) {
+        if (editingId) {
+          const current = habits.find((habit) => habit._id === editingId);
+          const updated = queueCollectionUpdate("habits", current, form);
+          setHabits((prev) =>
+            prev.map((habit) => (habit._id === editingId ? updated : habit)),
+          );
+        } else {
+          const created = queueCollectionCreate("habits", form);
+          setHabits((prev) => [created, ...prev]);
+        }
+        closeModal();
+      } else {
+        setError(err.message || "Failed to save habit");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -152,6 +197,16 @@ function HabitsContent() {
 
   const updateHabit = async (habit, payload) => {
     try {
+      if (!navigator.onLine) {
+        const updatedHabit = queueCollectionUpdate("habits", habit, payload);
+        setHabits((prev) =>
+          prev.map((item) =>
+            item._id === updatedHabit._id ? updatedHabit : item,
+          ),
+        );
+        return;
+      }
+
       const token = localStorage.getItem("token");
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/habits/${habit._id}`,
@@ -173,8 +228,12 @@ function HabitsContent() {
           item._id === updatedHabit._id ? updatedHabit : item,
         ),
       );
+      saveCollectionItemToCache("habits", updatedHabit);
     } catch {
-      return;
+      const updatedHabit = queueCollectionUpdate("habits", habit, payload);
+      setHabits((prev) =>
+        prev.map((item) => (item._id === updatedHabit._id ? updatedHabit : item)),
+      );
     }
   };
 
@@ -234,6 +293,12 @@ function HabitsContent() {
     if (!confirmed) return;
 
     try {
+      if (!navigator.onLine) {
+        queueCollectionDelete("habits", habit._id);
+        setHabits((prev) => prev.filter((item) => item._id !== habit._id));
+        return;
+      }
+
       const token = localStorage.getItem("token");
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/habits/${habit._id}`,
@@ -247,7 +312,12 @@ function HabitsContent() {
         throw new Error(data.message || "Failed to delete habit");
       setHabits((prev) => prev.filter((item) => item._id !== habit._id));
     } catch (err) {
-      setError(err.message || "Failed to delete habit");
+      if (isNetworkFailure(err)) {
+        queueCollectionDelete("habits", habit._id);
+        setHabits((prev) => prev.filter((item) => item._id !== habit._id));
+      } else {
+        setError(err.message || "Failed to delete habit");
+      }
     }
   };
 
@@ -305,9 +375,9 @@ function HabitsContent() {
           </p>
         ) : (
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            {habits.map((habit) => (
+            {habits.map((habit, index) => (
               <article
-                key={habit._id}
+                key={`${habit._id || habit.name}-${index}`}
                 className="rounded-3xl border border-base-300 p-5"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -516,6 +586,15 @@ function StatCard({ label, value }) {
       <p className="text-sm opacity-60">{label}</p>
       <h3 className="mt-3 text-4xl font-bold">{value}</h3>
     </div>
+  );
+}
+
+function isNetworkFailure(error) {
+  return (
+    error instanceof TypeError ||
+    /failed to fetch|networkerror|cors request did not succeed/i.test(
+      error?.message || "",
+    )
   );
 }
 

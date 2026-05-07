@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
+import {
+  fetchCollectionWithOfflineFallback,
+  queueCollectionCreate,
+  queueCollectionDelete,
+  queueCollectionUpdate,
+  saveCollectionItemToCache,
+  syncPendingCollections,
+} from "../utils/offlineCollections";
 
 const emptyTrip = {
   tripName: "",
@@ -37,18 +45,14 @@ function TripsContent() {
       setLoading(true);
       setError("");
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/trips`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Failed to load trips");
-      setTrips(Array.isArray(data) ? data : data.trips || data.data || []);
+      const list = await fetchCollectionWithOfflineFallback({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+        collection: "trips",
+      });
+      setTrips(list);
     } catch (err) {
-      setError(err.message || "Failed to load trips");
-      setTrips([]);
+      setError(err.message || "Failed to load cached trips");
     } finally {
       setLoading(false);
     }
@@ -56,6 +60,18 @@ function TripsContent() {
 
   useEffect(() => {
     loadTrips();
+    const sync = async () => {
+      const token = localStorage.getItem("token");
+      await syncPendingCollections({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+      });
+      await loadTrips();
+    };
+    const handleOnline = () => sync();
+    window.addEventListener("online", handleOnline);
+    sync();
+    return () => window.removeEventListener("online", handleOnline);
   }, []);
 
   const stats = useMemo(() => {
@@ -127,6 +143,24 @@ function TripsContent() {
         ? `${import.meta.env.VITE_API_URL}/api/trips/${editingId}`
         : `${import.meta.env.VITE_API_URL}/api/trips`;
 
+      if (!navigator.onLine) {
+        if (editingId) {
+          const current = trips.find((trip) => trip._id === editingId);
+          const updated = queueCollectionUpdate("trips", current, form);
+          setTrips((prev) =>
+            prev.map((trip) => (trip._id === editingId ? updated : trip)),
+          );
+        } else {
+          const created = queueCollectionCreate("trips", {
+            ...form,
+            checklist: [],
+          });
+          setTrips((prev) => [created, ...prev]);
+        }
+        closeModal();
+        return;
+      }
+
       const response = await fetch(url, {
         method: editingId ? "PATCH" : "POST",
         headers: {
@@ -146,9 +180,27 @@ function TripsContent() {
       } else {
         setTrips((prev) => [savedTrip, ...prev]);
       }
+      saveCollectionItemToCache("trips", savedTrip);
       closeModal();
     } catch (err) {
-      setError(err.message || "Failed to save trip");
+      if (isNetworkFailure(err)) {
+        if (editingId) {
+          const current = trips.find((trip) => trip._id === editingId);
+          const updated = queueCollectionUpdate("trips", current, form);
+          setTrips((prev) =>
+            prev.map((trip) => (trip._id === editingId ? updated : trip)),
+          );
+        } else {
+          const created = queueCollectionCreate("trips", {
+            ...form,
+            checklist: [],
+          });
+          setTrips((prev) => [created, ...prev]);
+        }
+        closeModal();
+      } else {
+        setError(err.message || "Failed to save trip");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -159,6 +211,12 @@ function TripsContent() {
     if (!confirmed) return;
 
     try {
+      if (!navigator.onLine) {
+        queueCollectionDelete("trips", trip._id);
+        setTrips((prev) => prev.filter((item) => item._id !== trip._id));
+        return;
+      }
+
       const token = localStorage.getItem("token");
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/trips/${trip._id}`,
@@ -172,7 +230,12 @@ function TripsContent() {
         throw new Error(data.message || "Failed to delete trip");
       setTrips((prev) => prev.filter((item) => item._id !== trip._id));
     } catch (err) {
-      setError(err.message || "Failed to delete trip");
+      if (isNetworkFailure(err)) {
+        queueCollectionDelete("trips", trip._id);
+        setTrips((prev) => prev.filter((item) => item._id !== trip._id));
+      } else {
+        setError(err.message || "Failed to delete trip");
+      }
     }
   };
 
@@ -219,9 +282,9 @@ function TripsContent() {
           <p className="mt-6 opacity-70">No trips yet. Add your first trip.</p>
         ) : (
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            {trips.map((trip) => (
+            {trips.map((trip, index) => (
               <article
-                key={trip._id}
+                key={`${trip._id || trip.tripName}-${index}`}
                 className="rounded-3xl border border-base-300 p-5"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -422,6 +485,15 @@ function StatCard({ label, value }) {
       <p className="text-sm opacity-60">{label}</p>
       <h3 className="mt-3 text-4xl font-bold">{value}</h3>
     </div>
+  );
+}
+
+function isNetworkFailure(error) {
+  return (
+    error instanceof TypeError ||
+    /failed to fetch|networkerror|cors request did not succeed/i.test(
+      error?.message || "",
+    )
   );
 }
 

@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
+import {
+  fetchCollectionWithOfflineFallback,
+  queueCollectionCreate,
+  queueCollectionDelete,
+  queueCollectionUpdate,
+  saveCollectionItemToCache,
+  syncPendingCollections,
+} from "../utils/offlineCollections";
 
 function Projects() {
   const [projects, setProjects] = useState([]);
@@ -25,6 +33,18 @@ function Projects() {
 
   useEffect(() => {
     fetchProjects();
+    const sync = async () => {
+      const token = localStorage.getItem("token");
+      await syncPendingCollections({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+      });
+      await fetchProjects();
+    };
+    const handleOnline = () => sync();
+    window.addEventListener("online", handleOnline);
+    sync();
+    return () => window.removeEventListener("online", handleOnline);
   }, []);
 
   const fetchProjects = async () => {
@@ -34,33 +54,15 @@ function Projects() {
 
       const token = localStorage.getItem("token");
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/projects`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to fetch projects");
-      }
-
-      const projectList = Array.isArray(data)
-        ? data
-        : Array.isArray(data.projects)
-          ? data.projects
-          : Array.isArray(data.data)
-            ? data.data
-            : [];
+      const projectList = await fetchCollectionWithOfflineFallback({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+        collection: "projects",
+      });
 
       setProjects(projectList);
     } catch (err) {
-      setError(err.message || "Failed to load projects");
-      setProjects([]);
+      setError(err.message || "Failed to load cached projects");
     } finally {
       setLoading(false);
     }
@@ -99,11 +101,19 @@ function Projects() {
       const payload = {
         name: projectForm.name,
         client: projectForm.client,
-        budget: projectForm.budget,
+        budget: Number(projectForm.budget) || 0,
         color: projectForm.color,
         notes: projectForm.notes,
         status: projectForm.status,
       };
+
+      if (!navigator.onLine) {
+        const newProject = queueCollectionCreate("projects", payload);
+        setProjects((prev) => [newProject, ...prev]);
+        resetProjectForm();
+        setShowAddProjectModal(false);
+        return;
+      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/projects`,
@@ -125,11 +135,27 @@ function Projects() {
 
       const newProject = data.project || data.data || data;
       setProjects((prev) => [newProject, ...prev]);
+      saveCollectionItemToCache("projects", newProject);
 
       resetProjectForm();
       setShowAddProjectModal(false);
     } catch (err) {
-      setError(err.message || "Failed to add project");
+      if (isNetworkFailure(err)) {
+        const payload = {
+          name: projectForm.name,
+          client: projectForm.client,
+          budget: Number(projectForm.budget) || 0,
+          color: projectForm.color,
+          notes: projectForm.notes,
+          status: projectForm.status,
+        };
+        const newProject = queueCollectionCreate("projects", payload);
+        setProjects((prev) => [newProject, ...prev]);
+        resetProjectForm();
+        setShowAddProjectModal(false);
+      } else {
+        setError(err.message || "Failed to add project");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -167,11 +193,28 @@ function Projects() {
       const payload = {
         name: projectForm.name,
         client: projectForm.client,
-        budget: projectForm.budget,
+        budget: Number(projectForm.budget) || 0,
         color: projectForm.color,
         notes: projectForm.notes,
         status: projectForm.status,
       };
+
+      if (!navigator.onLine) {
+        const updatedProject = queueCollectionUpdate(
+          "projects",
+          selectedProject,
+          payload,
+        );
+        setProjects((prev) =>
+          prev.map((project) =>
+            project._id === selectedProject._id ? updatedProject : project,
+          ),
+        );
+        setSelectedProject(updatedProject);
+        setShowEditProjectModal(false);
+        resetProjectForm();
+        return;
+      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/projects/${selectedProject._id}`,
@@ -198,12 +241,37 @@ function Projects() {
           project._id === selectedProject._id ? updatedProject : project,
         ),
       );
+      saveCollectionItemToCache("projects", updatedProject);
 
       setSelectedProject(updatedProject);
       setShowEditProjectModal(false);
       resetProjectForm();
     } catch (err) {
-      setError(err.message || "Failed to update project");
+      if (isNetworkFailure(err)) {
+        const payload = {
+          name: projectForm.name,
+          client: projectForm.client,
+          budget: Number(projectForm.budget) || 0,
+          color: projectForm.color,
+          notes: projectForm.notes,
+          status: projectForm.status,
+        };
+        const updatedProject = queueCollectionUpdate(
+          "projects",
+          selectedProject,
+          payload,
+        );
+        setProjects((prev) =>
+          prev.map((project) =>
+            project._id === selectedProject._id ? updatedProject : project,
+          ),
+        );
+        setSelectedProject(updatedProject);
+        setShowEditProjectModal(false);
+        resetProjectForm();
+      } else {
+        setError(err.message || "Failed to update project");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -217,6 +285,14 @@ function Projects() {
       setError("");
 
       const token = localStorage.getItem("token");
+
+      if (!navigator.onLine) {
+        queueCollectionDelete("projects", projectId);
+        setProjects((prev) =>
+          prev.filter((project) => project._id !== projectId),
+        );
+        return;
+      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/projects/${projectId}`,
@@ -243,7 +319,14 @@ function Projects() {
         setShowEditProjectModal(false);
       }
     } catch (err) {
-      setError(err.message || "Failed to delete project");
+      if (isNetworkFailure(err)) {
+        queueCollectionDelete("projects", projectId);
+        setProjects((prev) =>
+          prev.filter((project) => project._id !== projectId),
+        );
+      } else {
+        setError(err.message || "Failed to delete project");
+      }
     }
   };
 
@@ -260,6 +343,21 @@ function Projects() {
         ...projectToUpdate,
         status: "completed",
       };
+
+      if (!navigator.onLine) {
+        const updatedProject = queueCollectionUpdate(
+          "projects",
+          projectToUpdate,
+          payload,
+        );
+        setProjects((prev) =>
+          prev.map((project) =>
+            project._id === projectId ? updatedProject : project,
+          ),
+        );
+        if (selectedProject?._id === projectId) setSelectedProject(updatedProject);
+        return;
+      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/projects/${projectId}`,
@@ -286,12 +384,27 @@ function Projects() {
           project._id === projectId ? updatedProject : project,
         ),
       );
+      saveCollectionItemToCache("projects", updatedProject);
 
       if (selectedProject?._id === projectId) {
         setSelectedProject(updatedProject);
       }
     } catch (err) {
-      setError(err.message || "Failed to complete project");
+      if (isNetworkFailure(err)) {
+        const projectToUpdate = projects.find((p) => p._id === projectId);
+        if (!projectToUpdate) return;
+        const updatedProject = queueCollectionUpdate("projects", projectToUpdate, {
+          ...projectToUpdate,
+          status: "completed",
+        });
+        setProjects((prev) =>
+          prev.map((project) =>
+            project._id === projectId ? updatedProject : project,
+          ),
+        );
+      } else {
+        setError(err.message || "Failed to complete project");
+      }
     }
   };
 
@@ -399,9 +512,9 @@ function Projects() {
               </p>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {filteredProjects.map((project) => (
+                {filteredProjects.map((project, index) => (
                   <div
-                    key={project._id}
+                    key={`${project._id || project.name}-${index}`}
                     className={`rounded-3xl border p-5 min-w-0 overflow-hidden ${
                       colorClasses[project.color] ||
                       "bg-base-100 border-base-300"
@@ -816,6 +929,15 @@ function Projects() {
         </>
       )}
     </DashboardLayout>
+  );
+}
+
+function isNetworkFailure(error) {
+  return (
+    error instanceof TypeError ||
+    /failed to fetch|networkerror|cors request did not succeed/i.test(
+      error?.message || "",
+    )
   );
 }
 

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
+import { fetchTasksWithOfflineFallback } from "../utils/offlineTasks";
+import { fetchCollectionWithOfflineFallback } from "../utils/offlineCollections";
 
 function Calendar() {
   const [tasks, setTasks] = useState([]);
@@ -137,24 +139,13 @@ function CalendarContent({
 
   useEffect(() => {
     const fetchPayments = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/planned-payments`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (response.ok) {
-          const data = await response.json();
-          const list = Array.isArray(data)
-            ? data
-            : data.plannedPayments || data.data || [];
-          setPlannedPayments(list);
-        } else {
-          setPlannedPayments([]);
-        }
-      } catch {
-        setPlannedPayments([]);
-      }
+      const token = localStorage.getItem("token");
+      const list = await fetchCollectionWithOfflineFallback({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+        collection: "plannedPayments",
+      });
+      setPlannedPayments(list);
     };
 
     fetchPayments();
@@ -167,27 +158,13 @@ function CalendarContent({
         return;
       }
 
-      try {
-        const token = localStorage.getItem("token");
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/trips`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        const data = await response.json();
-
-        if (response.ok) {
-          const list = Array.isArray(data)
-            ? data
-            : data.trips || data.data || [];
-          setTrips(list);
-        } else {
-          setTrips([]);
-        }
-      } catch {
-        setTrips([]);
-      }
+      const token = localStorage.getItem("token");
+      const list = await fetchCollectionWithOfflineFallback({
+        apiUrl: import.meta.env.VITE_API_URL,
+        token,
+        collection: "trips",
+      });
+      setTrips(list);
     };
 
     fetchTrips();
@@ -207,28 +184,10 @@ function CalendarContent({
 
         const token = localStorage.getItem("token");
 
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/tasks`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Failed to fetch tasks");
-        }
-
-        const taskList = Array.isArray(data)
-          ? data
-          : Array.isArray(data.tasks)
-            ? data.tasks
-            : Array.isArray(data.data)
-              ? data.data
-              : [];
+        const { tasks: taskList } = await fetchTasksWithOfflineFallback({
+          apiUrl: import.meta.env.VITE_API_URL,
+          token,
+        });
 
         const filteredTasks = taskList.filter((task) => {
           return task.persona === selectedPersonaName?.toLowerCase().trim();
@@ -236,8 +195,7 @@ function CalendarContent({
 
         setTasks(filteredTasks);
       } catch (err) {
-        setTasksError(err.message || "Failed to load tasks");
-        setTasks([]);
+        setTasksError(err.message || "Failed to load cached tasks");
       } finally {
         setTasksLoading(false);
       }
@@ -246,6 +204,7 @@ function CalendarContent({
     fetchTasks();
   }, [
     selectedPersona,
+    selectedPersonaName,
     isFinance,
     isTravel,
     setTasks,
@@ -586,9 +545,9 @@ function CalendarContent({
                       </div>
 
                       <div className="space-y-1">
-                        {dayItems.slice(0, 2).map((item) => (
+                        {dayItems.slice(0, 2).map((item, itemIndex) => (
                           <div
-                            key={item.id}
+                            key={`${item.id || item.title}-${itemIndex}`}
                             className="flex items-center gap-1 truncate rounded-lg bg-base-200 px-2 py-1 text-xs"
                           >
                             {!isFinance && !isTravel ? (
@@ -657,9 +616,9 @@ function CalendarContent({
                       </div>
 
                       <div className="space-y-1">
-                        {dayItems.slice(0, 2).map((item) => (
+                        {dayItems.slice(0, 2).map((item, itemIndex) => (
                           <div
-                            key={item.id}
+                            key={`${item.id || item.title}-${itemIndex}`}
                             className="flex items-center gap-1 text-xs"
                           >
                             {!isFinance && !isTravel ? (
@@ -725,9 +684,9 @@ function CalendarContent({
           </p>
         ) : (
           <div className="space-y-4">
-            {selectedDateItems.map((item) => (
+            {selectedDateItems.map((item, itemIndex) => (
               <div
-                key={item.id}
+                key={`${item.id || item.title}-${itemIndex}`}
                 className="rounded-3xl border border-base-300 p-5"
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

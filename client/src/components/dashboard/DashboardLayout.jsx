@@ -2,6 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import Sidebar from "./Sidebar";
 
+const PERSONA_CACHE_KEY = "mpp.personas.cache.v1";
+const FALLBACK_PERSONAS = [
+  { _id: "offline-student", name: "Student" },
+  { _id: "offline-work", name: "Work" },
+  { _id: "offline-wellness", name: "Wellness" },
+  { _id: "offline-travel", name: "Travel" },
+  { _id: "offline-finance", name: "Finance" },
+];
+
 function DashboardLayout({
   title,
   subtitle,
@@ -83,15 +92,28 @@ function DashboardLayout({
         setError("");
 
         const token = localStorage.getItem("token");
+        const cachedPersonas = readCachedPersonas();
 
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/personas`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
+        if (!navigator.onLine) {
+          applyPersonas(cachedPersonas.length ? cachedPersonas : FALLBACK_PERSONAS);
+          return;
+        }
+
+        let response;
+
+        try {
+          response = await fetch(
+            `${import.meta.env.VITE_API_URL}/api/personas`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
             },
-          },
-        );
+          );
+        } catch {
+          applyPersonas(cachedPersonas.length ? cachedPersonas : FALLBACK_PERSONAS);
+          return;
+        }
 
         const data = await response.json();
 
@@ -107,79 +129,77 @@ function DashboardLayout({
               ? data.data
               : [];
 
-        const personaOrder = {
-          Admin: 0,
-          Student: 1,
-          Work: 2,
-          Finance: 3,
-          Wellness: 4,
-          Travel: 5,
-        };
-        const sortedPersonas = personaList.sort(
-          (a, b) =>
-            (personaOrder[a.name] ?? 999) - (personaOrder[b.name] ?? 999),
-        );
-
-        setPersonas(sortedPersonas);
-
-        const savedPersonaId = localStorage.getItem("activePersonaId");
-        const savedPersonaName = localStorage.getItem("activePersonaName");
-
-        let initialPersona = null;
-
-        const restrictedPersonaName =
-          restrictTo === "admin"
-            ? "admin"
-            : restrictTo === "student"
-              ? "student"
-              : restrictTo === "work"
-                ? "work"
-                : restrictTo === "wellness"
-                  ? "wellness"
-                  : restrictTo === "travel"
-                    ? "travel"
-                    : restrictTo === "finance"
-                      ? "finance"
-                      : null;
-
-        if (restrictedPersonaName) {
-          initialPersona = sortedPersonas.find(
-            (persona) =>
-              persona.name?.toLowerCase().trim() === restrictedPersonaName,
-          );
-        }
-
-        const savedPersonaIsAvailableById = savedPersonaId
-          ? sortedPersonas.find((persona) => persona._id === savedPersonaId)
-          : null;
-        const savedPersonaIsAvailableByName = savedPersonaName
-          ? sortedPersonas.find(
-              (persona) =>
-                persona.name?.toLowerCase().trim() ===
-                savedPersonaName.toLowerCase().trim(),
-            )
-          : null;
-
-        initialPersona =
-          initialPersona ||
-          savedPersonaIsAvailableById ||
-          savedPersonaIsAvailableByName;
-
-        if (!initialPersona && sortedPersonas.length > 0) {
-          initialPersona = sortedPersonas[0];
-        }
-
-        if (initialPersona) {
-          setSelectedPersona(initialPersona._id);
-          setSelectedPersonaName(initialPersona.name);
-          localStorage.setItem("activePersonaId", initialPersona._id);
-          localStorage.setItem("activePersonaName", initialPersona.name);
-        }
+        applyPersonas(personaList);
       } catch (err) {
-        setError(err.message || "Something went wrong");
-        setPersonas([]);
+        const cachedPersonas = readCachedPersonas();
+        if (cachedPersonas.length) {
+          applyPersonas(cachedPersonas);
+        } else {
+          setError(err.message || "Something went wrong");
+          setPersonas([]);
+        }
       } finally {
         setLoading(false);
+      }
+    };
+
+    const applyPersonas = (personaList) => {
+      const sortedPersonas = sortPersonas(personaList);
+      setPersonas(sortedPersonas);
+      cachePersonas(sortedPersonas);
+
+      const savedPersonaId = localStorage.getItem("activePersonaId");
+      const savedPersonaName = localStorage.getItem("activePersonaName");
+
+      let initialPersona = null;
+
+      const restrictedPersonaName =
+        restrictTo === "admin"
+          ? "admin"
+          : restrictTo === "student"
+            ? "student"
+            : restrictTo === "work"
+              ? "work"
+              : restrictTo === "wellness"
+                ? "wellness"
+                : restrictTo === "travel"
+                  ? "travel"
+                  : restrictTo === "finance"
+                    ? "finance"
+                    : null;
+
+      if (restrictedPersonaName) {
+        initialPersona = sortedPersonas.find(
+          (persona) =>
+            persona.name?.toLowerCase().trim() === restrictedPersonaName,
+        );
+      }
+
+      const savedPersonaIsAvailableById = savedPersonaId
+        ? sortedPersonas.find((persona) => persona._id === savedPersonaId)
+        : null;
+      const savedPersonaIsAvailableByName = savedPersonaName
+        ? sortedPersonas.find(
+            (persona) =>
+              persona.name?.toLowerCase().trim() ===
+              savedPersonaName.toLowerCase().trim(),
+          )
+        : null;
+
+      initialPersona =
+        initialPersona ||
+        savedPersonaIsAvailableById ||
+        savedPersonaIsAvailableByName;
+
+      if (!initialPersona && sortedPersonas.length > 0) {
+        initialPersona = sortedPersonas[0];
+      }
+
+      if (initialPersona) {
+        setSelectedPersona(initialPersona._id);
+        setSelectedPersonaName(initialPersona.name);
+        localStorage.setItem("activePersonaId", initialPersona._id);
+        localStorage.setItem("activePersonaName", initialPersona.name);
       }
     };
 
@@ -376,6 +396,33 @@ function DashboardLayout({
       </div>
     </div>
   );
+}
+
+function sortPersonas(personaList) {
+  const personaOrder = {
+    Admin: 0,
+    Student: 1,
+    Work: 2,
+    Finance: 3,
+    Wellness: 4,
+    Travel: 5,
+  };
+
+  return [...personaList].sort(
+    (a, b) => (personaOrder[a.name] ?? 999) - (personaOrder[b.name] ?? 999),
+  );
+}
+
+function readCachedPersonas() {
+  try {
+    return JSON.parse(localStorage.getItem(PERSONA_CACHE_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function cachePersonas(personas) {
+  localStorage.setItem(PERSONA_CACHE_KEY, JSON.stringify(personas));
 }
 
 export default DashboardLayout;

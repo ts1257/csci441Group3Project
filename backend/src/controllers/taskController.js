@@ -83,6 +83,7 @@ export async function updateTask(req, res, next) {
       taskType,
       reminderTime,
       tripId,
+      clientUpdatedAt,
     } = req.body;
 
     const task = await Task.findOne({
@@ -94,6 +95,20 @@ export async function updateTask(req, res, next) {
       return res.status(404).json({
         message: "Task not found",
       });
+    }
+
+    if (clientUpdatedAt) {
+      const clientTimestamp = new Date(clientUpdatedAt).getTime();
+      const serverTimestamp = task.updatedAt
+        ? new Date(task.updatedAt).getTime()
+        : 0;
+
+      if (!Number.isNaN(clientTimestamp) && serverTimestamp > clientTimestamp) {
+        return res.status(200).json({
+          message: "Task already has newer cloud changes",
+          task,
+        });
+      }
     }
 
     if (persona !== undefined) task.persona = persona;
