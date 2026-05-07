@@ -2,6 +2,11 @@
 
 A full-stack productivity app that lets users switch between **Student**, **Work**, and **Finance** personas — each with its own tailored dashboard, tasks, courses/projects, calendar, and finance tracking.
 
+This repository contains:
+
+- `backend/`: Express + MongoDB API
+- `client/`: React + Vite frontend
+
 ## Tech Stack
 
 | Layer    | Technology                                  |
@@ -19,18 +24,29 @@ A full-stack productivity app that lets users switch between **Student**, **Work
 - Node.js ≥ 18
 - MongoDB instance (local or Atlas)
 
-### Backend
+## Installation
+
+Install dependencies for both apps:
 
 ```bash
 cd backend
 npm install
+
+cd ../client
+npm install
+```
+
+### Backend
+
+```bash
+cd backend
 ```
 
 Create a `.env` file in `backend/`:
 
 ```
 PORT=5000
-MONGO_URI=your_mongodb_connection_string
+MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret
 CLIENT_URL=http://localhost:5173
 ```
@@ -43,12 +59,12 @@ npm start     # production
 ```
 
 The API runs at `http://localhost:5000`.
+Health check: `GET /api/health`.
 
 ### Frontend
 
 ```bash
 cd client
-npm install
 npm run dev
 ```
 
@@ -66,15 +82,19 @@ The app runs at `http://localhost:5173`.
 - **Task Manager** — Create, edit, complete, and delete tasks scoped per persona
 - **Courses** — Track enrolled courses with instructor, credits, color, and status (Student persona)
 - **Projects** — Track projects with client, budget, notes, color, and status (Work persona)
+- **Habits** — Build and track recurring habits
+- **Trips** — Plan and organize trips
 - **Finance Dashboard** — Income/expense records with category tagging; planned payments with overdue detection and one-click complete
 - **Calendar** — Unified monthly view of tasks and planned payments filtered by persona
 - **Categories** — Custom categories for finance records
+- **Admin Area** — Admin-only users and task management pages
 - **Authentication** — Register, login, JWT-protected routes
 
 ## API Endpoints
 
 | Resource         | Base Path               |
 | ---------------- | ----------------------- |
+| Health           | `/api/health`           |
 | Auth             | `/api/auth`             |
 | Personas         | `/api/personas`         |
 | Tasks            | `/api/tasks`            |
@@ -83,28 +103,37 @@ The app runs at `http://localhost:5173`.
 | Records          | `/api/records`          |
 | Planned Payments | `/api/planned-payments` |
 | Categories       | `/api/categories`       |
+| Habits           | `/api/habits`           |
+| Trips            | `/api/trips`            |
+| Admin            | `/api/admin`            |
 
 ## Frontend Routes
 
-| Path                          | Page              | Protected |
-| ----------------------------- | ----------------- | --------- |
-| `/`                           | Home (landing)    | No        |
-| `/login`                      | Login             | No        |
-| `/register`                   | Register          | No        |
-| `/dashboard`                  | Main dashboard    | Yes       |
-| `/dashboard/tasks`            | Task manager      | Yes       |
-| `/dashboard/courses`          | Courses (Student) | Yes       |
-| `/dashboard/projects`         | Projects (Work)   | Yes       |
-| `/dashboard/records`          | Finance records   | Yes       |
-| `/dashboard/planned-payments` | Planned payments  | Yes       |
-| `/dashboard/category`         | Manage categories | Yes       |
-| `/dashboard/calendar`         | Calendar          | Yes       |
+| Path                          | Page              | Protected   |
+| ----------------------------- | ----------------- | ----------- |
+| `/`                           | Home (landing)    | No          |
+| `/login`                      | Login             | No          |
+| `/register`                   | Register          | No          |
+| `/dashboard`                  | Main dashboard    | Yes         |
+| `/dashboard/tasks`            | Task manager      | Yes         |
+| `/dashboard/courses`          | Courses (Student) | Yes         |
+| `/dashboard/projects`         | Projects (Work)   | Yes         |
+| `/dashboard/records`          | Finance records   | Yes         |
+| `/dashboard/planned-payments` | Planned payments  | Yes         |
+| `/dashboard/category`         | Manage categories | Yes         |
+| `/dashboard/calendar`         | Calendar          | Yes         |
+| `/dashboard/habits`           | Habits            | Yes         |
+| `/dashboard/trips`            | Trips             | Yes         |
+| `/dashboard/admin/users`      | Admin users       | Yes (Admin) |
+| `/dashboard/admin/tasks`      | Admin tasks       | Yes (Admin) |
 
 ## Scripts
 
-| Command                 | Description                   |
-| ----------------------- | ----------------------------- |
-| `backend: npm run dev`  | Start backend in watch mode   |
-| `backend: npm start`    | Start backend in production   |
-| `client: npm run dev`   | Start frontend dev server     |
-| `client: npm run build` | Build frontend for production |
+| Command                   | Description                   |
+| ------------------------- | ----------------------------- |
+| `backend: npm run dev`    | Start backend in watch mode   |
+| `backend: npm start`      | Start backend in production   |
+| `client: npm run dev`     | Start frontend dev server     |
+| `client: npm run build`   | Build frontend for production |
+| `client: npm run preview` | Preview production build      |
+| `client: npm run lint`    | Run ESLint on frontend code   |
