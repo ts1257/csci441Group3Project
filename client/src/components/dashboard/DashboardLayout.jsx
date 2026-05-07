@@ -1,15 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import Sidebar from "./Sidebar";
-
-const PERSONA_CACHE_KEY = "mpp.personas.cache.v1";
-const FALLBACK_PERSONAS = [
-  { _id: "offline-student", name: "Student" },
-  { _id: "offline-work", name: "Work" },
-  { _id: "offline-wellness", name: "Wellness" },
-  { _id: "offline-travel", name: "Travel" },
-  { _id: "offline-finance", name: "Finance" },
-];
+import { getOfflineQueueCount, getOfflineSyncStatus, syncOfflineQueue } from "../../utils/offlineSync";
+import { getReminderPermission, requestReminderPermission } from "../../utils/reminders";
 
 function DashboardLayout({
   title,
@@ -37,17 +30,53 @@ function DashboardLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem("sidebarCollapsed") === "true";
   });
+  const [syncStatus, setSyncStatus] = useState(getOfflineSyncStatus());
+  const [queueCount, setQueueCount] = useState(getOfflineQueueCount());
+  const [reminderPermission, setReminderPermission] = useState(() => getReminderPermission());
+  const [reminderToast, setReminderToast] = useState(null);
 
   useEffect(() => {
-    const goOnline = () => setOnline(true);
-    const goOffline = () => setOnline(false);
+    const goOnline = () => {
+      setOnline(true);
+      syncOfflineQueue();
+    };
+    const goOffline = () => {
+      setOnline(false);
+      setSyncStatus("offline");
+    };
+
+    const handleQueueChange = (event) => {
+      setQueueCount(event.detail?.count ?? getOfflineQueueCount());
+    };
+
+    const handleSyncStatusChange = (event) => {
+      setSyncStatus(event.detail?.status || getOfflineSyncStatus());
+      setQueueCount(getOfflineQueueCount());
+    };
+
+    const handleReminderPermission = (event) => {
+      setReminderPermission(event.detail?.permission || getReminderPermission());
+    };
+
+    const handleReminderToast = (event) => {
+      setReminderToast(event.detail);
+      window.setTimeout(() => setReminderToast(null), 7000);
+    };
 
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
+    window.addEventListener("offline-sync-queue-change", handleQueueChange);
+    window.addEventListener("offline-sync-status-change", handleSyncStatusChange);
+    window.addEventListener("reminder-permission-change", handleReminderPermission);
+    window.addEventListener("wellness-reminder", handleReminderToast);
 
     return () => {
       window.removeEventListener("online", goOnline);
       window.removeEventListener("offline", goOffline);
+      window.removeEventListener("offline-sync-queue-change", handleQueueChange);
+      window.removeEventListener("offline-sync-status-change", handleSyncStatusChange);
+      window.removeEventListener("reminder-permission-change", handleReminderPermission);
+      window.removeEventListener("wellness-reminder", handleReminderToast);
     };
   }, []);
 
@@ -92,28 +121,15 @@ function DashboardLayout({
         setError("");
 
         const token = localStorage.getItem("token");
-        const cachedPersonas = readCachedPersonas();
 
-        if (!navigator.onLine) {
-          applyPersonas(cachedPersonas.length ? cachedPersonas : FALLBACK_PERSONAS);
-          return;
-        }
-
-        let response;
-
-        try {
-          response = await fetch(
-            `${import.meta.env.VITE_API_URL}/api/personas`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/personas`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
             },
-          );
-        } catch {
-          applyPersonas(cachedPersonas.length ? cachedPersonas : FALLBACK_PERSONAS);
-          return;
-        }
+          },
+        );
 
         const data = await response.json();
 
@@ -129,77 +145,75 @@ function DashboardLayout({
               ? data.data
               : [];
 
-        applyPersonas(personaList);
-      } catch (err) {
-        const cachedPersonas = readCachedPersonas();
-        if (cachedPersonas.length) {
-          applyPersonas(cachedPersonas);
-        } else {
-          setError(err.message || "Something went wrong");
-          setPersonas([]);
+        const personaOrder = {
+          Admin: 0,
+          Student: 1,
+          Work: 2,
+          Finance: 3,
+          Wellness: 4,
+          Travel: 5,
+        };
+        const sortedPersonas = personaList.sort(
+          (a, b) =>
+            (personaOrder[a.name] ?? 999) - (personaOrder[b.name] ?? 999),
+        );
+
+        setPersonas(sortedPersonas);
+
+        const savedPersonaId = localStorage.getItem("activePersonaId");
+        const savedPersonaName = localStorage.getItem("activePersonaName");
+
+        let initialPersona = null;
+
+        const restrictedPersonaName =
+          restrictTo === "admin"
+            ? "admin"
+            : restrictTo === "student"
+              ? "student"
+              : restrictTo === "work"
+                ? "work"
+                : restrictTo === "wellness"
+                  ? "wellness"
+                  : restrictTo === "travel"
+                    ? "travel"
+                    : restrictTo === "finance"
+                      ? "finance"
+                      : null;
+
+        if (restrictedPersonaName) {
+          initialPersona = sortedPersonas.find(
+            (persona) => persona.name?.toLowerCase().trim() === restrictedPersonaName,
+          );
         }
+
+        const savedPersonaIsAvailableById = savedPersonaId
+          ? sortedPersonas.find((persona) => persona._id === savedPersonaId)
+          : null;
+        const savedPersonaIsAvailableByName = savedPersonaName
+          ? sortedPersonas.find(
+              (persona) =>
+                persona.name?.toLowerCase().trim() ===
+                savedPersonaName.toLowerCase().trim(),
+            )
+          : null;
+
+        initialPersona = initialPersona || savedPersonaIsAvailableById || savedPersonaIsAvailableByName;
+
+        if (!initialPersona && sortedPersonas.length > 0) {
+          initialPersona = sortedPersonas[0];
+        }
+
+        if (initialPersona) {
+          setSelectedPersona(initialPersona._id);
+          setSelectedPersonaName(initialPersona.name);
+          localStorage.setItem("activePersonaId", initialPersona._id);
+          localStorage.setItem("activePersonaName", initialPersona.name);
+        }
+      } catch (err) {
+        setError(err.message || "Something went wrong");
+        setPersonas([]);
       } finally {
         setLoading(false);
-      }
-    };
-
-    const applyPersonas = (personaList) => {
-      const sortedPersonas = sortPersonas(personaList);
-      setPersonas(sortedPersonas);
-      cachePersonas(sortedPersonas);
-
-      const savedPersonaId = localStorage.getItem("activePersonaId");
-      const savedPersonaName = localStorage.getItem("activePersonaName");
-
-      let initialPersona = null;
-
-      const restrictedPersonaName =
-        restrictTo === "admin"
-          ? "admin"
-          : restrictTo === "student"
-            ? "student"
-            : restrictTo === "work"
-              ? "work"
-              : restrictTo === "wellness"
-                ? "wellness"
-                : restrictTo === "travel"
-                  ? "travel"
-                  : restrictTo === "finance"
-                    ? "finance"
-                    : null;
-
-      if (restrictedPersonaName) {
-        initialPersona = sortedPersonas.find(
-          (persona) =>
-            persona.name?.toLowerCase().trim() === restrictedPersonaName,
-        );
-      }
-
-      const savedPersonaIsAvailableById = savedPersonaId
-        ? sortedPersonas.find((persona) => persona._id === savedPersonaId)
-        : null;
-      const savedPersonaIsAvailableByName = savedPersonaName
-        ? sortedPersonas.find(
-            (persona) =>
-              persona.name?.toLowerCase().trim() ===
-              savedPersonaName.toLowerCase().trim(),
-          )
-        : null;
-
-      initialPersona =
-        initialPersona ||
-        savedPersonaIsAvailableById ||
-        savedPersonaIsAvailableByName;
-
-      if (!initialPersona && sortedPersonas.length > 0) {
-        initialPersona = sortedPersonas[0];
-      }
-
-      if (initialPersona) {
-        setSelectedPersona(initialPersona._id);
-        setSelectedPersonaName(initialPersona.name);
-        localStorage.setItem("activePersonaId", initialPersona._id);
-        localStorage.setItem("activePersonaName", initialPersona.name);
       }
     };
 
@@ -240,14 +254,7 @@ function DashboardLayout({
     if (!allowed) {
       navigate("/dashboard", { replace: true });
     }
-  }, [
-    restrictTo,
-    selectedPersonaName,
-    normalizedPersona,
-    isAdmin,
-    isFinance,
-    navigate,
-  ]);
+  }, [restrictTo, selectedPersonaName, normalizedPersona, isAdmin, isFinance, navigate]);
 
   const handlePersonaChange = (e) => {
     const personaId = e.target.value;
@@ -277,14 +284,14 @@ function DashboardLayout({
       : isFinance && financeSubtitle
         ? financeSubtitle
         : normalizedPersona === "student" && studentSubtitle
-          ? studentSubtitle
-          : normalizedPersona === "work" && workSubtitle
-            ? workSubtitle
-            : normalizedPersona === "wellness" && wellnessSubtitle
-              ? wellnessSubtitle
-              : normalizedPersona === "travel" && travelSubtitle
-                ? travelSubtitle
-                : subtitle;
+        ? studentSubtitle
+        : normalizedPersona === "work" && workSubtitle
+          ? workSubtitle
+          : normalizedPersona === "wellness" && wellnessSubtitle
+            ? wellnessSubtitle
+            : normalizedPersona === "travel" && travelSubtitle
+              ? travelSubtitle
+              : subtitle;
 
   const content =
     typeof children === "function"
@@ -346,7 +353,7 @@ function DashboardLayout({
 
         <main className="min-w-0 flex-1">
           <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-base-300 bg-base-100 p-5 shadow-sm md:flex-row md:items-center md:justify-between">
-            <div>
+            <div className="min-w-0 flex-1">
               <h1 className="text-3xl font-bold md:text-4xl">
                 {resolvedTitle}
               </h1>
@@ -355,8 +362,8 @@ function DashboardLayout({
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2">
+            <div className="flex w-full shrink-0 flex-col gap-3 sm:w-auto sm:items-end">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <span className="text-sm font-medium opacity-70">Mode</span>
                 {loading ? (
                   <span className="text-sm">Loading...</span>
@@ -379,50 +386,65 @@ function DashboardLayout({
                 )}
               </div>
 
-              <div
-                className={`rounded-full border px-4 py-1 text-sm font-medium ${
-                  online
-                    ? "border-green-500 text-green-500"
-                    : "border-red-500 text-red-500"
-                }`}
-              >
-                {online ? "Online" : "Offline"}
+              <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                <div
+                  className={`rounded-full border px-4 py-1 text-sm font-medium ${
+                    online
+                      ? "border-green-500 text-green-500"
+                      : "border-red-500 text-red-500"
+                  }`}
+                >
+                  {online ? "Online" : "Offline"}
+                </div>
+
+                <button
+                  type="button"
+                  className={`rounded-full border px-4 py-1 text-sm font-medium ${
+                    queueCount > 0
+                      ? "border-warning text-warning"
+                      : "border-blue-500 text-blue-500"
+                  }`}
+                  onClick={syncOfflineQueue}
+                  title="Click to retry offline sync"
+                >
+                  {syncStatus === "syncing"
+                    ? "Syncing..."
+                    : queueCount > 0
+                      ? `${queueCount} queued`
+                      : "Synced"}
+                </button>
+
+                {normalizedPersona === "wellness" && (
+                  <button
+                    type="button"
+                    className={`rounded-full border px-4 py-1 text-sm font-medium ${
+                      reminderPermission === "granted"
+                        ? "border-green-500 text-green-500"
+                        : "border-primary text-primary"
+                    }`}
+                    onClick={requestReminderPermission}
+                  >
+                    {reminderPermission === "granted" ? "Reminders On" : "Enable Reminders"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
+
+          {reminderToast && (
+            <div className="alert alert-info mb-5 rounded-2xl shadow-sm">
+              <div>
+                <p className="font-semibold">{reminderToast.title}</p>
+                <p className="text-sm">{reminderToast.body}</p>
+              </div>
+            </div>
+          )}
 
           {content}
         </main>
       </div>
     </div>
   );
-}
-
-function sortPersonas(personaList) {
-  const personaOrder = {
-    Admin: 0,
-    Student: 1,
-    Work: 2,
-    Finance: 3,
-    Wellness: 4,
-    Travel: 5,
-  };
-
-  return [...personaList].sort(
-    (a, b) => (personaOrder[a.name] ?? 999) - (personaOrder[b.name] ?? 999),
-  );
-}
-
-function readCachedPersonas() {
-  try {
-    return JSON.parse(localStorage.getItem(PERSONA_CACHE_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function cachePersonas(personas) {
-  localStorage.setItem(PERSONA_CACHE_KEY, JSON.stringify(personas));
 }
 
 export default DashboardLayout;

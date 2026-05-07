@@ -1,10 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  fetchCategoriesWithOfflineFallback,
-  fetchRecordsWithOfflineFallback,
-  queueCreateRecord,
-  saveRecordToCache,
-} from "../../utils/offlineFinance";
 
 function FinanceSection({ onDataChange }) {
   const [records, setRecords] = useState([]);
@@ -56,26 +50,41 @@ function FinanceSection({ onDataChange }) {
     try {
       const token = localStorage.getItem("token");
 
-      const [recordResult, paymentsResult, categoriesResult] = await Promise.all([
-        fetchRecordsWithOfflineFallback({
-          apiUrl: import.meta.env.VITE_API_URL,
-          token,
+      const [recordsRes, paymentsRes, categoriesRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL}/api/records`, {
+          headers: { Authorization: `Bearer ${token}` },
         }),
-        fetchFinanceList({
-          path: "/api/planned-payments",
-          listKey: "plannedPayments",
-          token,
-          fallback: [],
+        fetch(`${import.meta.env.VITE_API_URL}/api/planned-payments`, {
+          headers: { Authorization: `Bearer ${token}` },
         }),
-        fetchCategoriesWithOfflineFallback({
-          apiUrl: import.meta.env.VITE_API_URL,
-          token,
+        fetch(`${import.meta.env.VITE_API_URL}/api/categories`, {
+          headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
 
-      setRecords(recordResult.records);
-      setPlannedPayments(paymentsResult);
-      setCategories(categoriesResult);
+      if (recordsRes.ok) {
+        const recordsData = await recordsRes.json();
+        const recordsList = Array.isArray(recordsData)
+          ? recordsData
+          : recordsData.records || recordsData.data || [];
+        setRecords(recordsList);
+      }
+
+      if (paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        const paymentsList = Array.isArray(paymentsData)
+          ? paymentsData
+          : paymentsData.plannedPayments || paymentsData.data || [];
+        setPlannedPayments(paymentsList);
+      }
+
+      if (categoriesRes.ok) {
+        const categoriesData = await categoriesRes.json();
+        const categoriesList = Array.isArray(categoriesData)
+          ? categoriesData
+          : categoriesData.categories || categoriesData.data || [];
+        setCategories(categoriesList);
+      }
     } catch (err) {
       setError(err.message || "Failed to load finance data");
     } finally {
@@ -264,25 +273,14 @@ function FinanceSection({ onDataChange }) {
     if (!recordForm.title.trim()) return;
     if (!recordForm.amount) return;
 
-    const token = localStorage.getItem("token");
-    const payload = buildRecordPayload(recordForm);
-
     try {
       setSubmitting(true);
       setError("");
+      const token = localStorage.getItem("token");
 
       // Sync category first if there's one
-      if (navigator.onLine && recordForm.category.trim()) {
+      if (recordForm.category.trim()) {
         await syncCategoryStorage(recordForm.category, recordForm.subcategory);
-      }
-
-      if (!navigator.onLine) {
-        const newRecord = queueCreateRecord(payload);
-        setRecords([newRecord, ...records]);
-        onDataChange?.({ records: [newRecord, ...records] });
-        resetRecordForm();
-        setShowRecordModal(false);
-        return;
       }
 
       const response = await fetch(
@@ -293,7 +291,15 @@ function FinanceSection({ onDataChange }) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            title: recordForm.title.trim(),
+            type: recordForm.type,
+            amount: Number(recordForm.amount) || 0,
+            category: recordForm.category.trim(),
+            subcategory: recordForm.subcategory.trim(),
+            date: recordForm.date,
+            notes: recordForm.notes,
+          }),
         },
       );
 
@@ -302,20 +308,11 @@ function FinanceSection({ onDataChange }) {
 
       const newRecord = data.record || data;
       setRecords([newRecord, ...records]);
-      saveRecordToCache(newRecord);
       onDataChange?.({ records: [newRecord, ...records] });
       resetRecordForm();
       setShowRecordModal(false);
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const newRecord = queueCreateRecord(payload);
-        setRecords([newRecord, ...records]);
-        onDataChange?.({ records: [newRecord, ...records] });
-        resetRecordForm();
-        setShowRecordModal(false);
-      } else {
-        setError(err.message || "Failed to add record");
-      }
+      setError(err.message || "Failed to add record");
     } finally {
       setSubmitting(false);
     }
@@ -1542,47 +1539,6 @@ function FinanceSection({ onDataChange }) {
         </div>
       )}
     </>
-  );
-}
-
-async function fetchFinanceList({ path, listKey, token, fallback }) {
-  if (!navigator.onLine) return fallback;
-
-  try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = await response.json();
-
-    if (!response.ok) return fallback;
-
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data[listKey])) return data[listKey];
-    if (Array.isArray(data.data)) return data.data;
-    return fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function buildRecordPayload(recordForm) {
-  return {
-    title: recordForm.title.trim(),
-    type: recordForm.type,
-    amount: Number(recordForm.amount) || 0,
-    category: recordForm.category.trim() || "Uncategorized",
-    subcategory: recordForm.subcategory.trim(),
-    date: recordForm.date || new Date().toISOString().slice(0, 10),
-    notes: recordForm.notes,
-  };
-}
-
-function isNetworkFailure(error) {
-  return (
-    error instanceof TypeError ||
-    /failed to fetch|networkerror|cors request did not succeed/i.test(
-      error?.message || "",
-    )
   );
 }
 

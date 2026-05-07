@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
-import {
-  fetchCategoriesWithOfflineFallback,
-  fetchRecordsWithOfflineFallback,
-  getFinanceSyncState,
-  queueCreateRecord,
-  queueDeleteRecord,
-  queueUpdateRecord,
-  saveRecordToCache,
-  syncPendingFinance,
-} from "../utils/offlineFinance";
 
 function Records() {
   const [records, setRecords] = useState([]);
@@ -17,8 +7,6 @@ function Records() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [syncState, setSyncState] = useState(getFinanceSyncState);
-  const [syncMessage, setSyncMessage] = useState("");
 
   const [showAddRecordModal, setShowAddRecordModal] = useState(false);
   const [showEditRecordModal, setShowEditRecordModal] = useState(false);
@@ -42,42 +30,40 @@ function Records() {
     fetchCategories();
   }, []);
 
-  useEffect(() => {
-    const handleOnline = () => {
-      setSyncMessage("Back online. Syncing finance changes...");
-      runSync();
-    };
-    const handleOffline = () => {
-      setSyncState(getFinanceSyncState());
-      setSyncMessage("Offline records are saved locally.");
-    };
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    runSync();
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
   const fetchRecords = async () => {
     try {
       setLoading(true);
       setError("");
 
       const token = localStorage.getItem("token");
-      const { records: recordList, source } = await fetchRecordsWithOfflineFallback({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-      });
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/records`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch records");
+      }
+
+      const recordList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.records)
+          ? data.records
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
 
       setRecords(recordList);
-      setSyncState(getFinanceSyncState());
-      setSyncMessage(source === "cache" ? "Showing cached finance records." : "");
     } catch (err) {
       setError(err.message || "Failed to load records");
+      setRecords([]);
     } finally {
       setLoading(false);
     }
@@ -86,35 +72,33 @@ function Records() {
   const fetchCategories = async () => {
     try {
       const token = localStorage.getItem("token");
-      const categoryList = await fetchCategoriesWithOfflineFallback({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-      });
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/categories`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch categories");
+      }
+
+      const categoryList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.categories)
+          ? data.categories
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
 
       setCategories(categoryList);
-    } catch {
+    } catch (err) {
       setCategories([]);
-    }
-  };
-
-  const runSync = async () => {
-    if (!navigator.onLine) {
-      setSyncState(getFinanceSyncState());
-      return;
-    }
-
-    const token = localStorage.getItem("token");
-    const result = await syncPendingFinance({
-      apiUrl: import.meta.env.VITE_API_URL,
-      token,
-    });
-    setSyncState(getFinanceSyncState());
-
-    if (result.synced > 0) {
-      setSyncMessage("Finance changes synced.");
-      fetchRecords();
-    } else if (result.pendingCount > 0) {
-      setSyncMessage("Finance sync will retry when the API is reachable.");
     }
   };
 
@@ -202,15 +186,12 @@ function Records() {
     if (!recordForm.title.trim()) return;
     if (!recordForm.amount) return;
 
-    const token = localStorage.getItem("token");
-    const payload = buildRecordPayload(recordForm);
-
     try {
       setSubmitting(true);
       setError("");
 
       // Sync category if needed
-      if (navigator.onLine && recordForm.category.trim()) {
+      if (recordForm.category.trim()) {
         const categoryExists = categories.some(
           (cat) =>
             cat.name?.toLowerCase().trim() ===
@@ -218,6 +199,7 @@ function Records() {
         );
 
         if (!categoryExists) {
+          const token = localStorage.getItem("token");
           const categoryPayload = {
             name: recordForm.category.trim(),
             subcategories: recordForm.subcategory
@@ -225,41 +207,39 @@ function Records() {
               : [],
           };
 
-          try {
-            const categoryResponse = await fetch(
-              `${import.meta.env.VITE_API_URL}/api/categories`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(categoryPayload),
+          const categoryResponse = await fetch(
+            `${import.meta.env.VITE_API_URL}/api/categories`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
               },
-            );
+              body: JSON.stringify(categoryPayload),
+            },
+          );
 
-            if (categoryResponse.ok) {
-              const newCat = await categoryResponse.json();
-              setCategories((prev) => [
-                newCat.category || newCat.data || newCat,
-                ...prev,
-              ]);
-            }
-          } catch {
-            // Keep the record flow moving; the record itself can sync later.
+          if (categoryResponse.ok) {
+            const newCat = await categoryResponse.json();
+            setCategories((prev) => [
+              newCat.category || newCat.data || newCat,
+              ...prev,
+            ]);
           }
         }
       }
 
-      if (!navigator.onLine) {
-        const newRecord = queueCreateRecord(payload);
-        setRecords((prev) => [newRecord, ...prev]);
-        setSyncState(getFinanceSyncState());
-        setSyncMessage("Record saved offline and queued for sync.");
-        resetRecordForm();
-        setShowAddRecordModal(false);
-        return;
-      }
+      const token = localStorage.getItem("token");
+
+      const payload = {
+        title: recordForm.title.trim(),
+        type: recordForm.type,
+        amount: Number(recordForm.amount) || 0,
+        category: recordForm.category.trim(),
+        subcategory: recordForm.subcategory.trim(),
+        date: recordForm.date,
+        notes: recordForm.notes,
+      };
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/records`,
@@ -281,21 +261,11 @@ function Records() {
 
       const newRecord = data.record || data.data || data;
       setRecords((prev) => [newRecord, ...prev]);
-      saveRecordToCache(newRecord);
 
       resetRecordForm();
       setShowAddRecordModal(false);
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const newRecord = queueCreateRecord(payload);
-        setRecords((prev) => [newRecord, ...prev]);
-        setSyncState(getFinanceSyncState());
-        setSyncMessage("API unavailable. Record saved locally for sync.");
-        resetRecordForm();
-        setShowAddRecordModal(false);
-      } else {
-        setError(err.message || "Failed to add record");
-      }
+      setError(err.message || "Failed to add record");
     } finally {
       setSubmitting(false);
     }
@@ -326,28 +296,21 @@ function Records() {
     if (!selectedRecord || !recordForm.title.trim()) return;
     if (!recordForm.amount) return;
 
-    const payload = buildRecordPayload(recordForm);
-
     try {
       setSubmitting(true);
       setError("");
 
       const token = localStorage.getItem("token");
 
-      if (!navigator.onLine) {
-        const updatedRecord = queueUpdateRecord(selectedRecord, payload);
-        setRecords((prev) =>
-          prev.map((record) =>
-            record._id === selectedRecord._id ? updatedRecord : record,
-          ),
-        );
-        setSelectedRecord(updatedRecord);
-        setSyncState(getFinanceSyncState());
-        setSyncMessage("Record update saved offline and queued for sync.");
-        setShowEditRecordModal(false);
-        resetRecordForm();
-        return;
-      }
+      const payload = {
+        title: recordForm.title.trim(),
+        type: recordForm.type,
+        amount: Number(recordForm.amount) || 0,
+        category: recordForm.category.trim(),
+        subcategory: recordForm.subcategory.trim(),
+        date: recordForm.date,
+        notes: recordForm.notes,
+      };
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/records/${selectedRecord._id}`,
@@ -374,27 +337,12 @@ function Records() {
           record._id === selectedRecord._id ? updatedRecord : record,
         ),
       );
-      saveRecordToCache(updatedRecord);
 
       setSelectedRecord(updatedRecord);
       setShowEditRecordModal(false);
       resetRecordForm();
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const updatedRecord = queueUpdateRecord(selectedRecord, payload);
-        setRecords((prev) =>
-          prev.map((record) =>
-            record._id === selectedRecord._id ? updatedRecord : record,
-          ),
-        );
-        setSelectedRecord(updatedRecord);
-        setSyncState(getFinanceSyncState());
-        setSyncMessage("API unavailable. Record update saved locally.");
-        setShowEditRecordModal(false);
-        resetRecordForm();
-      } else {
-        setError(err.message || "Failed to update record");
-      }
+      setError(err.message || "Failed to update record");
     } finally {
       setSubmitting(false);
     }
@@ -408,21 +356,6 @@ function Records() {
       setError("");
 
       const token = localStorage.getItem("token");
-
-      if (!navigator.onLine) {
-        queueDeleteRecord(recordId);
-        setRecords((prev) => prev.filter((record) => record._id !== recordId));
-
-        if (selectedRecord?._id === recordId) {
-          setSelectedRecord(null);
-          setShowViewRecordModal(false);
-          setShowEditRecordModal(false);
-        }
-
-        setSyncState(getFinanceSyncState());
-        setSyncMessage("Record delete saved offline and queued for sync.");
-        return;
-      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/records/${recordId}`,
@@ -447,21 +380,7 @@ function Records() {
         setShowEditRecordModal(false);
       }
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        queueDeleteRecord(recordId);
-        setRecords((prev) => prev.filter((record) => record._id !== recordId));
-
-        if (selectedRecord?._id === recordId) {
-          setSelectedRecord(null);
-          setShowViewRecordModal(false);
-          setShowEditRecordModal(false);
-        }
-
-        setSyncState(getFinanceSyncState());
-        setSyncMessage("API unavailable. Record delete saved locally.");
-      } else {
-        setError(err.message || "Failed to delete record");
-      }
+      setError(err.message || "Failed to delete record");
     }
   };
 
@@ -547,16 +466,6 @@ function Records() {
               </div>
             </div>
 
-            <div className="mb-5 flex flex-col gap-2 rounded-2xl border border-base-300 bg-base-200 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <span className="font-medium">
-                {syncState.online ? "Online" : "Offline"}
-                {syncState.pendingCount > 0
-                  ? ` - ${syncState.pendingCount} pending sync`
-                  : " - all finance changes synced"}
-              </span>
-              {syncMessage && <span className="opacity-70">{syncMessage}</span>}
-            </div>
-
             {filteredRecords.length === 0 ? (
               <p className="opacity-70">
                 No records found for {activeFilter.toLowerCase()}.
@@ -598,11 +507,6 @@ function Records() {
                           <span className="badge badge-outline">
                             ${Number(record.amount || 0).toFixed(2)}
                           </span>
-                          {record._syncStatus && (
-                            <span className="badge badge-warning">
-                              Pending Sync
-                            </span>
-                          )}
                         </div>
 
                         <div className="flex flex-wrap gap-2">
@@ -1031,27 +935,6 @@ function Records() {
         </>
       )}
     </DashboardLayout>
-  );
-}
-
-function buildRecordPayload(recordForm) {
-  return {
-    title: recordForm.title.trim(),
-    type: recordForm.type,
-    amount: Number(recordForm.amount) || 0,
-    category: recordForm.category.trim() || "Uncategorized",
-    subcategory: recordForm.subcategory.trim(),
-    date: recordForm.date || new Date().toISOString().slice(0, 10),
-    notes: recordForm.notes,
-  };
-}
-
-function isNetworkFailure(error) {
-  return (
-    error instanceof TypeError ||
-    /failed to fetch|networkerror|cors request did not succeed/i.test(
-      error?.message || "",
-    )
   );
 }
 

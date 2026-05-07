@@ -4,12 +4,7 @@ function shouldAutoComplete(progress, goal) {
   const progressNumber = Number(progress);
   const goalNumber = Number(goal);
 
-  return (
-    Number.isFinite(progressNumber) &&
-    Number.isFinite(goalNumber) &&
-    goalNumber > 0 &&
-    progressNumber >= goalNumber
-  );
+  return Number.isFinite(progressNumber) && Number.isFinite(goalNumber) && goalNumber > 0 && progressNumber >= goalNumber;
 }
 
 function getCompletedProgress(progress, goal) {
@@ -39,15 +34,7 @@ function getNotDoneProgress(progress, goal) {
 
 export async function createHabit(req, res, next) {
   try {
-    const {
-      name,
-      category,
-      goal,
-      progress,
-      unit,
-      reminderTime,
-      completedToday,
-    } = req.body;
+    const { name, category, goal, progress, unit, reminderTime, completedToday } = req.body;
 
     if (!name) {
       return res.status(400).json({ message: "Habit name is required" });
@@ -58,13 +45,10 @@ export async function createHabit(req, res, next) {
       name: name.trim(),
       category: category || "other",
       goal: goal?.trim() || "",
-      progress: Boolean(completedToday)
-        ? getCompletedProgress(progress?.trim() || "", goal)
-        : progress?.trim() || "",
+      progress: Boolean(completedToday) ? getCompletedProgress(progress?.trim() || "", goal) : progress?.trim() || "",
       unit: unit?.trim() || "",
       reminderTime: reminderTime?.trim() || "",
-      completedToday:
-        shouldAutoComplete(progress, goal) || Boolean(completedToday),
+      completedToday: shouldAutoComplete(progress, goal) || Boolean(completedToday),
     });
 
     res.status(201).json({ message: "Habit created successfully", habit });
@@ -75,9 +59,7 @@ export async function createHabit(req, res, next) {
 
 export async function getHabits(req, res, next) {
   try {
-    const habits = await Habit.find({ user: req.user.userId }).sort({
-      createdAt: -1,
-    });
+    const habits = await Habit.find({ user: req.user.userId }).sort({ createdAt: -1 });
     res.status(200).json({ habits });
   } catch (error) {
     next(error);
@@ -87,15 +69,7 @@ export async function getHabits(req, res, next) {
 export async function updateHabit(req, res, next) {
   try {
     const { id } = req.params;
-    const {
-      name,
-      category,
-      goal,
-      progress,
-      unit,
-      reminderTime,
-      completedToday,
-    } = req.body;
+    const { name, category, goal, progress, unit, reminderTime, completedToday } = req.body;
 
     const habit = await Habit.findOne({ _id: id, user: req.user.userId });
 
@@ -125,17 +99,12 @@ export async function updateHabit(req, res, next) {
       habit.completedToday = true;
     }
 
-    if (
-      completedToday === false &&
-      !shouldAutoComplete(habit.progress, habit.goal)
-    ) {
+    if (completedToday === false && !shouldAutoComplete(habit.progress, habit.goal)) {
       habit.completedToday = false;
     }
 
     const updatedHabit = await habit.save();
-    res
-      .status(200)
-      .json({ message: "Habit updated successfully", habit: updatedHabit });
+    res.status(200).json({ message: "Habit updated successfully", habit: updatedHabit });
   } catch (error) {
     next(error);
   }

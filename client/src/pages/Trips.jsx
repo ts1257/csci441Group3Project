@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
-import {
-  fetchCollectionWithOfflineFallback,
-  queueCollectionCreate,
-  queueCollectionDelete,
-  queueCollectionUpdate,
-  saveCollectionItemToCache,
-  syncPendingCollections,
-} from "../utils/offlineCollections";
 
 const emptyTrip = {
   tripName: "",
@@ -45,14 +37,15 @@ function TripsContent() {
       setLoading(true);
       setError("");
       const token = localStorage.getItem("token");
-      const list = await fetchCollectionWithOfflineFallback({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-        collection: "trips",
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/trips`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      setTrips(list);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Failed to load trips");
+      setTrips(Array.isArray(data) ? data : data.trips || data.data || []);
     } catch (err) {
-      setError(err.message || "Failed to load cached trips");
+      setError(err.message || "Failed to load trips");
+      setTrips([]);
     } finally {
       setLoading(false);
     }
@@ -60,18 +53,6 @@ function TripsContent() {
 
   useEffect(() => {
     loadTrips();
-    const sync = async () => {
-      const token = localStorage.getItem("token");
-      await syncPendingCollections({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-      });
-      await loadTrips();
-    };
-    const handleOnline = () => sync();
-    window.addEventListener("online", handleOnline);
-    sync();
-    return () => window.removeEventListener("online", handleOnline);
   }, []);
 
   const stats = useMemo(() => {
@@ -86,8 +67,7 @@ function TripsContent() {
     }).length;
 
     const activeChecklist = trips.reduce(
-      (total, trip) =>
-        total + (trip.checklist || []).filter((item) => !item.completed).length,
+      (total, trip) => total + (trip.checklist || []).filter((item) => !item.completed).length,
       0,
     );
 
@@ -143,24 +123,6 @@ function TripsContent() {
         ? `${import.meta.env.VITE_API_URL}/api/trips/${editingId}`
         : `${import.meta.env.VITE_API_URL}/api/trips`;
 
-      if (!navigator.onLine) {
-        if (editingId) {
-          const current = trips.find((trip) => trip._id === editingId);
-          const updated = queueCollectionUpdate("trips", current, form);
-          setTrips((prev) =>
-            prev.map((trip) => (trip._id === editingId ? updated : trip)),
-          );
-        } else {
-          const created = queueCollectionCreate("trips", {
-            ...form,
-            checklist: [],
-          });
-          setTrips((prev) => [created, ...prev]);
-        }
-        closeModal();
-        return;
-      }
-
       const response = await fetch(url, {
         method: editingId ? "PATCH" : "POST",
         headers: {
@@ -174,33 +136,13 @@ function TripsContent() {
       const savedTrip = data.trip || data.data || data;
 
       if (editingId) {
-        setTrips((prev) =>
-          prev.map((trip) => (trip._id === savedTrip._id ? savedTrip : trip)),
-        );
+        setTrips((prev) => prev.map((trip) => (trip._id === savedTrip._id ? savedTrip : trip)));
       } else {
         setTrips((prev) => [savedTrip, ...prev]);
       }
-      saveCollectionItemToCache("trips", savedTrip);
       closeModal();
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        if (editingId) {
-          const current = trips.find((trip) => trip._id === editingId);
-          const updated = queueCollectionUpdate("trips", current, form);
-          setTrips((prev) =>
-            prev.map((trip) => (trip._id === editingId ? updated : trip)),
-          );
-        } else {
-          const created = queueCollectionCreate("trips", {
-            ...form,
-            checklist: [],
-          });
-          setTrips((prev) => [created, ...prev]);
-        }
-        closeModal();
-      } else {
-        setError(err.message || "Failed to save trip");
-      }
+      setError(err.message || "Failed to save trip");
     } finally {
       setSubmitting(false);
     }
@@ -211,31 +153,16 @@ function TripsContent() {
     if (!confirmed) return;
 
     try {
-      if (!navigator.onLine) {
-        queueCollectionDelete("trips", trip._id);
-        setTrips((prev) => prev.filter((item) => item._id !== trip._id));
-        return;
-      }
-
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/trips/${trip._id}`,
-        {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/trips/${trip._id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message || "Failed to delete trip");
+      if (!response.ok) throw new Error(data.message || "Failed to delete trip");
       setTrips((prev) => prev.filter((item) => item._id !== trip._id));
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        queueCollectionDelete("trips", trip._id);
-        setTrips((prev) => prev.filter((item) => item._id !== trip._id));
-      } else {
-        setError(err.message || "Failed to delete trip");
-      }
+      setError(err.message || "Failed to delete trip");
     }
   };
 
@@ -243,38 +170,22 @@ function TripsContent() {
     <>
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <StatCard label="Trips" value={loading ? "..." : stats.total} />
-        <StatCard
-          label="Upcoming Trips"
-          value={loading ? "..." : stats.upcoming}
-        />
-        <StatCard
-          label="Checklist Tasks"
-          value={loading ? "..." : stats.activeChecklist}
-        />
+        <StatCard label="Upcoming Trips" value={loading ? "..." : stats.upcoming} />
+        <StatCard label="Checklist Tasks" value={loading ? "..." : stats.activeChecklist} />
       </div>
 
       <section className="rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold md:text-3xl">Trips</h2>
-            <p className="mt-1 text-sm opacity-70">
-              This page is only for trip details. Add checklist tasks from the
-              Tasks page.
-            </p>
+            <p className="mt-1 text-sm opacity-70">This page is only for trip details. Add checklist tasks from the Tasks page.</p>
           </div>
-          <button
-            className="btn btn-primary rounded-2xl"
-            onClick={openAddModal}
-          >
+          <button className="btn btn-primary rounded-2xl" onClick={openAddModal}>
             Add Trip
           </button>
         </div>
 
-        {error && (
-          <div className="alert alert-error mt-5 rounded-2xl text-sm">
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-error mt-5 rounded-2xl text-sm">{error}</div>}
 
         {loading ? (
           <p className="mt-6 opacity-70">Loading trips...</p>
@@ -282,21 +193,14 @@ function TripsContent() {
           <p className="mt-6 opacity-70">No trips yet. Add your first trip.</p>
         ) : (
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            {trips.map((trip, index) => (
-              <article
-                key={`${trip._id || trip.tripName}-${index}`}
-                className="rounded-3xl border border-base-300 p-5"
-              >
+            {trips.map((trip) => (
+              <article key={trip._id} className="rounded-3xl border border-base-300 p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-semibold">{trip.tripName}</h3>
-                    <p className="mt-1 text-sm opacity-70">
-                      {trip.destination}
-                    </p>
+                    <p className="mt-1 text-sm opacity-70">{trip.destination}</p>
                   </div>
-                  <span className="badge badge-outline capitalize">
-                    {trip.travelType}
-                  </span>
+                  <span className="badge badge-outline capitalize">{trip.travelType}</span>
                 </div>
 
                 <div className="mt-4 space-y-1 text-sm opacity-80">
@@ -307,16 +211,10 @@ function TripsContent() {
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <button
-                    className="btn btn-outline btn-sm rounded-xl"
-                    onClick={() => startEdit(trip)}
-                  >
+                  <button className="btn btn-outline btn-sm rounded-xl" onClick={() => startEdit(trip)}>
                     Edit
                   </button>
-                  <button
-                    className="btn btn-error btn-outline btn-sm rounded-xl"
-                    onClick={() => deleteTrip(trip)}
-                  >
+                  <button className="btn btn-error btn-outline btn-sm rounded-xl" onClick={() => deleteTrip(trip)}>
                     Delete
                   </button>
                 </div>
@@ -330,83 +228,35 @@ function TripsContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-4xl bg-base-100 p-5 shadow-xl md:p-6">
             <div className="mb-5 flex items-center justify-between gap-4">
-              <h2 className="text-2xl font-bold">
-                {editingId ? "Edit Trip" : "Add Trip"}
-              </h2>
-              <button
-                className="btn btn-ghost btn-sm rounded-xl"
-                onClick={closeModal}
-              >
-                ✕
-              </button>
+              <h2 className="text-2xl font-bold">{editingId ? "Edit Trip" : "Add Trip"}</h2>
+              <button className="btn btn-ghost btn-sm rounded-xl" onClick={closeModal}>✕</button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Trip Name
-                </label>
-                <input
-                  type="text"
-                  name="tripName"
-                  value={form.tripName}
-                  onChange={handleChange}
-                  className="input input-bordered w-full rounded-2xl"
-                  placeholder="New York Conference"
-                />
+                <label className="mb-2 block text-sm font-medium">Trip Name</label>
+                <input type="text" name="tripName" value={form.tripName} onChange={handleChange} className="input input-bordered w-full rounded-2xl" placeholder="New York Conference" />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Destination
-                </label>
-                <input
-                  type="text"
-                  name="destination"
-                  value={form.destination}
-                  onChange={handleChange}
-                  className="input input-bordered w-full rounded-2xl"
-                  placeholder="New York"
-                />
+                <label className="mb-2 block text-sm font-medium">Destination</label>
+                <input type="text" name="destination" value={form.destination} onChange={handleChange} className="input input-bordered w-full rounded-2xl" placeholder="New York" />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    name="startDate"
-                    value={form.startDate}
-                    onChange={handleChange}
-                    className="input input-bordered w-full rounded-2xl"
-                  />
+                  <label className="mb-2 block text-sm font-medium">Start Date</label>
+                  <input type="date" name="startDate" value={form.startDate} onChange={handleChange} className="input input-bordered w-full rounded-2xl" />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    name="endDate"
-                    value={form.endDate}
-                    onChange={handleChange}
-                    className="input input-bordered w-full rounded-2xl"
-                  />
+                  <label className="mb-2 block text-sm font-medium">End Date</label>
+                  <input type="date" name="endDate" value={form.endDate} onChange={handleChange} className="input input-bordered w-full rounded-2xl" />
                 </div>
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Travel Type
-                </label>
-                <select
-                  name="travelType"
-                  value={form.travelType}
-                  onChange={handleChange}
-                  className="select select-bordered w-full rounded-2xl"
-                >
+                <label className="mb-2 block text-sm font-medium">Travel Type</label>
+                <select name="travelType" value={form.travelType} onChange={handleChange} className="select select-bordered w-full rounded-2xl">
                   <option value="flight">Flight</option>
                   <option value="car">Car</option>
                   <option value="train">Train</option>
@@ -417,40 +267,16 @@ function TripsContent() {
 
               <div>
                 <label className="mb-2 block text-sm font-medium">Notes</label>
-                <textarea
-                  name="notes"
-                  value={form.notes}
-                  onChange={handleChange}
-                  className="textarea textarea-bordered w-full rounded-2xl"
-                  rows="3"
-                  placeholder="Hotel check-in, terminal, transport notes"
-                />
+                <textarea name="notes" value={form.notes} onChange={handleChange} className="textarea textarea-bordered w-full rounded-2xl" rows="3" placeholder="Hotel check-in, terminal, transport notes" />
               </div>
 
               <div className="rounded-2xl bg-base-200 p-4 text-sm opacity-80">
-                Checklist items are added from the Travel Tasks page after the
-                trip is created.
+                Checklist items are added from the Travel Tasks page after the trip is created.
               </div>
 
               <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  className="btn rounded-2xl"
-                  onClick={closeModal}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary rounded-2xl"
-                  disabled={submitting}
-                >
-                  {submitting
-                    ? "Saving..."
-                    : editingId
-                      ? "Save Changes"
-                      : "Add Trip"}
-                </button>
+                <button type="button" className="btn rounded-2xl" onClick={closeModal}>Cancel</button>
+                <button type="submit" className="btn btn-primary rounded-2xl" disabled={submitting}>{submitting ? "Saving..." : editingId ? "Save Changes" : "Add Trip"}</button>
               </div>
             </form>
           </div>
@@ -462,9 +288,7 @@ function TripsContent() {
 
 function parseLocalDate(dateString) {
   if (!dateString) return null;
-  const datePart = dateString.includes("T")
-    ? dateString.split("T")[0]
-    : dateString;
+  const datePart = dateString.includes("T") ? dateString.split("T")[0] : dateString;
   const [year, month, day] = datePart.split("-").map(Number);
   return new Date(year, month - 1, day);
 }
@@ -485,15 +309,6 @@ function StatCard({ label, value }) {
       <p className="text-sm opacity-60">{label}</p>
       <h3 className="mt-3 text-4xl font-bold">{value}</h3>
     </div>
-  );
-}
-
-function isNetworkFailure(error) {
-  return (
-    error instanceof TypeError ||
-    /failed to fetch|networkerror|cors request did not succeed/i.test(
-      error?.message || "",
-    )
   );
 }
 

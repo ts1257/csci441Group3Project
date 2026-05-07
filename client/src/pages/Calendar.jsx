@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
-import { fetchTasksWithOfflineFallback } from "../utils/offlineTasks";
-import { fetchCollectionWithOfflineFallback } from "../utils/offlineCollections";
 
 function Calendar() {
   const [tasks, setTasks] = useState([]);
@@ -139,13 +137,24 @@ function CalendarContent({
 
   useEffect(() => {
     const fetchPayments = async () => {
-      const token = localStorage.getItem("token");
-      const list = await fetchCollectionWithOfflineFallback({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-        collection: "plannedPayments",
-      });
-      setPlannedPayments(list);
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/planned-payments`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const list = Array.isArray(data)
+            ? data
+            : data.plannedPayments || data.data || [];
+          setPlannedPayments(list);
+        } else {
+          setPlannedPayments([]);
+        }
+      } catch {
+        setPlannedPayments([]);
+      }
     };
 
     fetchPayments();
@@ -158,13 +167,22 @@ function CalendarContent({
         return;
       }
 
-      const token = localStorage.getItem("token");
-      const list = await fetchCollectionWithOfflineFallback({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-        collection: "trips",
-      });
-      setTrips(list);
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/trips`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+          const list = Array.isArray(data) ? data : data.trips || data.data || [];
+          setTrips(list);
+        } else {
+          setTrips([]);
+        }
+      } catch {
+        setTrips([]);
+      }
     };
 
     fetchTrips();
@@ -184,10 +202,28 @@ function CalendarContent({
 
         const token = localStorage.getItem("token");
 
-        const { tasks: taskList } = await fetchTasksWithOfflineFallback({
-          apiUrl: import.meta.env.VITE_API_URL,
-          token,
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/tasks`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to fetch tasks");
+        }
+
+        const taskList = Array.isArray(data)
+          ? data
+          : Array.isArray(data.tasks)
+            ? data.tasks
+            : Array.isArray(data.data)
+              ? data.data
+              : [];
 
         const filteredTasks = taskList.filter((task) => {
           return task.persona === selectedPersonaName?.toLowerCase().trim();
@@ -195,22 +231,15 @@ function CalendarContent({
 
         setTasks(filteredTasks);
       } catch (err) {
-        setTasksError(err.message || "Failed to load cached tasks");
+        setTasksError(err.message || "Failed to load tasks");
+        setTasks([]);
       } finally {
         setTasksLoading(false);
       }
     };
 
     fetchTasks();
-  }, [
-    selectedPersona,
-    selectedPersonaName,
-    isFinance,
-    isTravel,
-    setTasks,
-    setTasksLoading,
-    setTasksError,
-  ]);
+  }, [selectedPersona, isFinance, isTravel, setTasks, setTasksLoading, setTasksError]);
 
   const tasksByDate = useMemo(() => {
     const map = new Map();
@@ -379,11 +408,7 @@ function CalendarContent({
   });
 
   const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const selectedDateLabel = isFinance
-    ? "Planned payments"
-    : isTravel
-      ? "Trips"
-      : "Tasks";
+  const selectedDateLabel = isFinance ? "Planned payments" : isTravel ? "Trips" : "Tasks";
 
   const totalPlannedPayments = useMemo(
     () => plannedPayments.length,
@@ -545,9 +570,9 @@ function CalendarContent({
                       </div>
 
                       <div className="space-y-1">
-                        {dayItems.slice(0, 2).map((item, itemIndex) => (
+                        {dayItems.slice(0, 2).map((item) => (
                           <div
-                            key={`${item.id || item.title}-${itemIndex}`}
+                            key={item.id}
                             className="flex items-center gap-1 truncate rounded-lg bg-base-200 px-2 py-1 text-xs"
                           >
                             {!isFinance && !isTravel ? (
@@ -616,9 +641,9 @@ function CalendarContent({
                       </div>
 
                       <div className="space-y-1">
-                        {dayItems.slice(0, 2).map((item, itemIndex) => (
+                        {dayItems.slice(0, 2).map((item) => (
                           <div
-                            key={`${item.id || item.title}-${itemIndex}`}
+                            key={item.id}
                             className="flex items-center gap-1 text-xs"
                           >
                             {!isFinance && !isTravel ? (
@@ -635,12 +660,7 @@ function CalendarContent({
                         ))}
                         {dayItems.length === 0 && (
                           <p className="text-xs opacity-50">
-                            No{" "}
-                            {isFinance
-                              ? "payments"
-                              : isTravel
-                                ? "trips"
-                                : "tasks"}
+                            No {isFinance ? "payments" : isTravel ? "trips" : "tasks"}
                           </p>
                         )}
                       </div>
@@ -679,14 +699,13 @@ function CalendarContent({
 
         {selectedDateItems.length === 0 ? (
           <p className="opacity-70">
-            No {isFinance ? "planned payments" : isTravel ? "trips" : "tasks"}{" "}
-            for this date.
+            No {isFinance ? "planned payments" : isTravel ? "trips" : "tasks"} for this date.
           </p>
         ) : (
           <div className="space-y-4">
-            {selectedDateItems.map((item, itemIndex) => (
+            {selectedDateItems.map((item) => (
               <div
-                key={`${item.id || item.title}-${itemIndex}`}
+                key={item.id}
                 className="rounded-3xl border border-base-300 p-5"
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -696,13 +715,10 @@ function CalendarContent({
                       {item.description || "No description"}
                     </p>
                     <p className="mt-2 text-sm opacity-60">
-                      {item.kind === "trip" ? "Start" : "Due"}:{" "}
-                      {formatDate(item.dueDate)}
+                      {item.kind === "trip" ? "Start" : "Due"}: {formatDate(item.dueDate)}
                     </p>
                     {item.kind === "trip" && item.endDate && (
-                      <p className="mt-1 text-sm opacity-60">
-                        End: {formatDate(item.endDate)}
-                      </p>
+                      <p className="mt-1 text-sm opacity-60">End: {formatDate(item.endDate)}</p>
                     )}
                   </div>
 
@@ -720,9 +736,7 @@ function CalendarContent({
                       <>
                         <span className="badge badge-outline">Trip</span>
                         {item.travelType && (
-                          <span className="badge badge-outline">
-                            {item.travelType}
-                          </span>
+                          <span className="badge badge-outline">{item.travelType}</span>
                         )}
                       </>
                     ) : (

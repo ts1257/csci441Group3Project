@@ -14,16 +14,7 @@ const habitSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: [
-        "hydration",
-        "sleep",
-        "exercise",
-        "rest",
-        "mental-health",
-        "meal",
-        "medicine",
-        "other",
-      ],
+      enum: ["hydration", "sleep", "exercise", "rest", "mental-health", "meal", "medicine", "other"],
       default: "other",
     },
     goal: {

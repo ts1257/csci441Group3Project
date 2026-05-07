@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
-import {
-  fetchCollectionWithOfflineFallback,
-  queueCollectionCreate,
-  queueCollectionDelete,
-  queueCollectionUpdate,
-  saveCollectionItemToCache,
-  syncPendingCollections,
-} from "../utils/offlineCollections";
 
 function PlannedPayments() {
   const [plannedPayments, setPlannedPayments] = useState([]);
@@ -32,18 +24,6 @@ function PlannedPayments() {
 
   useEffect(() => {
     fetchPayments();
-    const sync = async () => {
-      const token = localStorage.getItem("token");
-      await syncPendingCollections({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-      });
-      await fetchPayments();
-    };
-    const handleOnline = () => sync();
-    window.addEventListener("online", handleOnline);
-    sync();
-    return () => window.removeEventListener("online", handleOnline);
   }, []);
 
   const fetchPayments = async () => {
@@ -53,15 +33,33 @@ function PlannedPayments() {
 
       const token = localStorage.getItem("token");
 
-      const paymentList = await fetchCollectionWithOfflineFallback({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-        collection: "plannedPayments",
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/planned-payments`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch payments");
+      }
+
+      const paymentList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.plannedPayments)
+          ? data.plannedPayments
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
 
       setPlannedPayments(paymentList);
     } catch (err) {
-      setError(err.message || "Failed to load cached payments");
+      setError(err.message || "Failed to load payments");
+      setPlannedPayments([]);
     } finally {
       setLoading(false);
     }
@@ -100,18 +98,10 @@ function PlannedPayments() {
       const payload = {
         title: paymentForm.title.trim(),
         amount: Number(paymentForm.amount) || 0,
-        dueDate: paymentForm.dueDate || new Date().toISOString().slice(0, 10),
+        dueDate: paymentForm.dueDate,
         status: paymentForm.status,
         notes: paymentForm.notes,
       };
-
-      if (!navigator.onLine) {
-        const newPayment = queueCollectionCreate("plannedPayments", payload);
-        setPlannedPayments((prev) => [newPayment, ...prev]);
-        resetPaymentForm();
-        setShowAddPaymentModal(false);
-        return;
-      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/planned-payments`,
@@ -133,26 +123,11 @@ function PlannedPayments() {
 
       const newPayment = data.plannedPayment || data.data || data;
       setPlannedPayments((prev) => [newPayment, ...prev]);
-      saveCollectionItemToCache("plannedPayments", newPayment);
 
       resetPaymentForm();
       setShowAddPaymentModal(false);
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const payload = {
-          title: paymentForm.title.trim(),
-          amount: Number(paymentForm.amount) || 0,
-          dueDate: paymentForm.dueDate || new Date().toISOString().slice(0, 10),
-          status: paymentForm.status,
-          notes: paymentForm.notes,
-        };
-        const newPayment = queueCollectionCreate("plannedPayments", payload);
-        setPlannedPayments((prev) => [newPayment, ...prev]);
-        resetPaymentForm();
-        setShowAddPaymentModal(false);
-      } else {
-        setError(err.message || "Failed to add payment");
-      }
+      setError(err.message || "Failed to add payment");
     } finally {
       setSubmitting(false);
     }
@@ -190,27 +165,10 @@ function PlannedPayments() {
       const payload = {
         title: paymentForm.title.trim(),
         amount: Number(paymentForm.amount) || 0,
-        dueDate: paymentForm.dueDate || new Date().toISOString().slice(0, 10),
+        dueDate: paymentForm.dueDate,
         status: paymentForm.status,
         notes: paymentForm.notes,
       };
-
-      if (!navigator.onLine) {
-        const updatedPayment = queueCollectionUpdate(
-          "plannedPayments",
-          selectedPayment,
-          payload,
-        );
-        setPlannedPayments((prev) =>
-          prev.map((payment) =>
-            payment._id === selectedPayment._id ? updatedPayment : payment,
-          ),
-        );
-        setSelectedPayment(updatedPayment);
-        setShowEditPaymentModal(false);
-        resetPaymentForm();
-        return;
-      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/planned-payments/${selectedPayment._id}`,
@@ -237,36 +195,12 @@ function PlannedPayments() {
           payment._id === selectedPayment._id ? updatedPayment : payment,
         ),
       );
-      saveCollectionItemToCache("plannedPayments", updatedPayment);
 
       setSelectedPayment(updatedPayment);
       setShowEditPaymentModal(false);
       resetPaymentForm();
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const payload = {
-          title: paymentForm.title.trim(),
-          amount: Number(paymentForm.amount) || 0,
-          dueDate: paymentForm.dueDate || new Date().toISOString().slice(0, 10),
-          status: paymentForm.status,
-          notes: paymentForm.notes,
-        };
-        const updatedPayment = queueCollectionUpdate(
-          "plannedPayments",
-          selectedPayment,
-          payload,
-        );
-        setPlannedPayments((prev) =>
-          prev.map((payment) =>
-            payment._id === selectedPayment._id ? updatedPayment : payment,
-          ),
-        );
-        setSelectedPayment(updatedPayment);
-        setShowEditPaymentModal(false);
-        resetPaymentForm();
-      } else {
-        setError(err.message || "Failed to update payment");
-      }
+      setError(err.message || "Failed to update payment");
     } finally {
       setSubmitting(false);
     }
@@ -280,20 +214,6 @@ function PlannedPayments() {
       setError("");
 
       const token = localStorage.getItem("token");
-
-      if (!navigator.onLine) {
-        queueCollectionDelete("plannedPayments", paymentId);
-        setPlannedPayments((prev) =>
-          prev.filter((payment) => payment._id !== paymentId),
-        );
-
-        if (selectedPayment?._id === paymentId) {
-          setSelectedPayment(null);
-          setShowViewPaymentModal(false);
-          setShowEditPaymentModal(false);
-        }
-        return;
-      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/planned-payments/${paymentId}`,
@@ -320,14 +240,7 @@ function PlannedPayments() {
         setShowEditPaymentModal(false);
       }
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        queueCollectionDelete("plannedPayments", paymentId);
-        setPlannedPayments((prev) =>
-          prev.filter((payment) => payment._id !== paymentId),
-        );
-      } else {
-        setError(err.message || "Failed to delete payment");
-      }
+      setError(err.message || "Failed to delete payment");
     }
   };
 
@@ -794,15 +707,6 @@ function PlannedPayments() {
         </>
       )}
     </DashboardLayout>
-  );
-}
-
-function isNetworkFailure(error) {
-  return (
-    error instanceof TypeError ||
-    /failed to fetch|networkerror|cors request did not succeed/i.test(
-      error?.message || "",
-    )
   );
 }
 

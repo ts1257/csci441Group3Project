@@ -67,9 +67,12 @@ export async function getAdminStats(req, res, next) {
   }
 }
 
+
 export async function getAdminUsers(req, res, next) {
   try {
-    const users = await User.find().select("-password").sort({ createdAt: -1 });
+    const users = await User.find()
+      .select("-password")
+      .sort({ createdAt: -1 });
 
     res.status(200).json({ users });
   } catch (error) {
@@ -93,41 +96,32 @@ export async function updateUserRole(req, res, next) {
     }
 
     if (user._id.toString() === req.user.userId && role !== "admin") {
-      return res
-        .status(400)
-        .json({ message: "You cannot remove your own admin role" });
+      return res.status(400).json({ message: "You cannot remove your own admin role" });
     }
 
     if (user.role === "admin" && role === "user") {
       const adminCount = await User.countDocuments({ role: "admin" });
 
       if (adminCount <= 1) {
-        return res
-          .status(400)
-          .json({ message: "At least one admin account is required" });
+        return res.status(400).json({ message: "At least one admin account is required" });
       }
     }
 
     user.role = role;
-    user.personas =
-      role === "admin"
-        ? ["admin", "student", "work", "finance", "wellness", "travel"]
-        : ["student", "work", "finance", "wellness", "travel"];
+    user.personas = role === "admin"
+      ? ["admin", "student", "work", "finance", "wellness", "travel"]
+      : ["student", "work", "finance", "wellness", "travel"];
 
     const updatedUser = await user.save();
 
     if (role === "admin") {
-      const adminPersonaExists = await Persona.exists({
-        user: user._id,
-        name: /^admin$/i,
-      });
+      const adminPersonaExists = await Persona.exists({ user: user._id, name: /^admin$/i });
 
       if (!adminPersonaExists) {
         await Persona.create({
           user: user._id,
           name: "Admin",
-          description:
-            "Admin mode for managing users, system records, and application data",
+          description: "Admin mode for managing users, system records, and application data",
           color: "#111827",
         });
       }
@@ -157,9 +151,7 @@ export async function deleteUser(req, res, next) {
     const { id } = req.params;
 
     if (id === req.user.userId) {
-      return res
-        .status(400)
-        .json({ message: "You cannot delete your own account" });
+      return res.status(400).json({ message: "You cannot delete your own account" });
     }
 
     const user = await User.findById(id);
@@ -172,9 +164,7 @@ export async function deleteUser(req, res, next) {
       const adminCount = await User.countDocuments({ role: "admin" });
 
       if (adminCount <= 1) {
-        return res
-          .status(400)
-          .json({ message: "At least one admin account is required" });
+        return res.status(400).json({ message: "At least one admin account is required" });
       }
     }
 
@@ -192,9 +182,7 @@ export async function deleteUser(req, res, next) {
 
     await user.deleteOne();
 
-    res
-      .status(200)
-      .json({ message: "User and related data deleted successfully" });
+    res.status(200).json({ message: "User and related data deleted successfully" });
   } catch (error) {
     next(error);
   }
@@ -257,19 +245,11 @@ export async function getAdminData(req, res, next) {
       Habit.find().populate("user", "name email role").sort({ createdAt: -1 }),
       Trip.find().populate("user", "name email role").sort({ createdAt: -1 }),
       Record.find().populate("user", "name email role").sort({ createdAt: -1 }),
-      PlannedPayment.find()
-        .populate("user", "name email role")
-        .sort({ createdAt: -1 }),
+      PlannedPayment.find().populate("user", "name email role").sort({ createdAt: -1 }),
       Course.find().populate("user", "name email role").sort({ createdAt: -1 }),
-      Project.find()
-        .populate("user", "name email role")
-        .sort({ createdAt: -1 }),
-      Category.find()
-        .populate("user", "name email role")
-        .sort({ createdAt: -1 }),
-      Persona.find()
-        .populate("user", "name email role")
-        .sort({ createdAt: -1 }),
+      Project.find().populate("user", "name email role").sort({ createdAt: -1 }),
+      Category.find().populate("user", "name email role").sort({ createdAt: -1 }),
+      Persona.find().populate("user", "name email role").sort({ createdAt: -1 }),
     ]);
 
     res.status(200).json({
@@ -290,57 +270,15 @@ export async function getAdminData(req, res, next) {
   }
 }
 
+
 const ADMIN_EDITABLE_FIELDS = {
-  tasks: [
-    "title",
-    "description",
-    "persona",
-    "dueDate",
-    "priority",
-    "status",
-    "courseId",
-    "projectId",
-    "taskType",
-    "reminderTime",
-    "tripId",
-  ],
-  habits: [
-    "name",
-    "category",
-    "goal",
-    "progress",
-    "unit",
-    "reminderTime",
-    "completedToday",
-  ],
-  trips: [
-    "tripName",
-    "destination",
-    "startDate",
-    "endDate",
-    "travelType",
-    "notes",
-  ],
-  records: [
-    "title",
-    "type",
-    "amount",
-    "category",
-    "subcategory",
-    "date",
-    "notes",
-  ],
+  tasks: ["title", "description", "persona", "dueDate", "priority", "status", "courseId", "projectId", "taskType", "reminderTime", "tripId"],
+  habits: ["name", "category", "goal", "progress", "unit", "reminderTime", "completedToday"],
+  trips: ["tripName", "destination", "startDate", "endDate", "travelType", "notes"],
+  records: ["title", "type", "amount", "category", "subcategory", "date", "notes"],
   plannedPayments: ["title", "amount", "dueDate", "status", "notes"],
   courses: ["name", "instructor", "credits", "color", "notes", "status"],
-  projects: [
-    "name",
-    "client",
-    "budget",
-    "color",
-    "description",
-    "notes",
-    "status",
-  ],
+  projects: ["name", "client", "budget", "color", "description", "notes", "status"],
   categories: ["name", "subcategories"],
 };
 
@@ -356,18 +294,14 @@ function normalizeAdminUpdate(resource, body) {
 
   if (update.amount !== undefined) update.amount = Number(update.amount) || 0;
   if (update.budget !== undefined) update.budget = Number(update.budget) || 0;
-  if (update.credits !== undefined)
-    update.credits = Number(update.credits) || 0;
+  if (update.credits !== undefined) update.credits = Number(update.credits) || 0;
 
   if (update.dueDate === "") update.dueDate = null;
   if (update.startDate === "") update.startDate = null;
   if (update.endDate === "") update.endDate = null;
   if (update.date === "") update.date = null;
 
-  if (
-    update.subcategories !== undefined &&
-    !Array.isArray(update.subcategories)
-  ) {
+  if (update.subcategories !== undefined && !Array.isArray(update.subcategories)) {
     update.subcategories = String(update.subcategories)
       .split(",")
       .map((item) => item.trim())
@@ -445,3 +379,4 @@ export async function deleteAdminDataItem(req, res, next) {
     next(error);
   }
 }
+

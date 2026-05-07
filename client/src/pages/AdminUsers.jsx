@@ -26,14 +26,11 @@ function AdminUsersContent() {
       setLoading(true);
       setError("");
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/admin/users`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/users`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
       const data = await response.json();
 
       if (!response.ok) {
@@ -57,49 +54,39 @@ function AdminUsersContent() {
     try {
       setError("");
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/admin/users/${user._id}/role`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ role }),
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/users/${user._id}/role`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify({ role }),
+      });
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.message || "Failed to update role");
       }
 
-      setUsers((prev) =>
-        prev.map((item) => (item._id === user._id ? { ...item, role } : item)),
-      );
+      setUsers((prev) => prev.map((item) => (item._id === user._id ? { ...item, role } : item)));
     } catch (err) {
       setError(err.message || "Failed to update role");
     }
   };
 
   const deleteUser = async (user) => {
-    const confirmed = window.confirm(
-      `Delete ${user.name}? This will remove the user and related data.`,
-    );
+    const confirmed = window.confirm(`Delete ${user.name}? This will remove the user and related data.`);
     if (!confirmed) return;
 
     try {
       setError("");
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/admin/users/${user._id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/users/${user._id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
       const data = await response.json();
 
       if (!response.ok) {
@@ -117,15 +104,11 @@ function AdminUsersContent() {
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold md:text-3xl">Manage Users</h2>
-          <p className="mt-1 text-sm opacity-70">
-            Admins can update roles and delete users except their own account.
-          </p>
+          <p className="mt-1 text-sm opacity-70">Admins can update roles and delete users except their own account.</p>
         </div>
       </div>
 
-      {error && (
-        <div className="alert alert-error mb-4 rounded-2xl">{error}</div>
-      )}
+      {error && <div className="alert alert-error mb-4 rounded-2xl">{error}</div>}
 
       {loading ? (
         <div className="flex justify-center py-10">
@@ -147,24 +130,17 @@ function AdminUsersContent() {
             </thead>
             <tbody>
               {users.map((user) => {
-                const isSelf =
-                  user._id === currentUser?._id || user._id === currentUser?.id;
+                const isSelf = user._id === currentUser?._id || user._id === currentUser?.id;
                 return (
                   <tr key={user._id}>
                     <td className="font-medium">{user.name}</td>
                     <td>{user.email}</td>
                     <td>
-                      <span
-                        className={`badge ${user.role === "admin" ? "badge-primary" : "badge-ghost"}`}
-                      >
+                      <span className={`badge ${user.role === "admin" ? "badge-primary" : "badge-ghost"}`}>
                         {user.role || "user"}
                       </span>
                     </td>
-                    <td>
-                      {user.createdAt
-                        ? new Date(user.createdAt).toLocaleDateString()
-                        : "N/A"}
-                    </td>
+                    <td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}</td>
                     <td>
                       <div className="flex justify-end gap-2">
                         {user.role === "admin" ? (

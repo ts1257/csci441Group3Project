@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
-import {
-  fetchCollectionWithOfflineFallback,
-  queueCollectionCreate,
-  queueCollectionDelete,
-  queueCollectionUpdate,
-  saveCollectionItemToCache,
-  syncPendingCollections,
-} from "../utils/offlineCollections";
 
 function Courses() {
   const [courses, setCourses] = useState([]);
@@ -33,18 +25,6 @@ function Courses() {
 
   useEffect(() => {
     fetchCourses();
-    const sync = async () => {
-      const token = localStorage.getItem("token");
-      await syncPendingCollections({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-      });
-      await fetchCourses();
-    };
-    const handleOnline = () => sync();
-    window.addEventListener("online", handleOnline);
-    sync();
-    return () => window.removeEventListener("online", handleOnline);
   }, []);
 
   const fetchCourses = async () => {
@@ -54,15 +34,33 @@ function Courses() {
 
       const token = localStorage.getItem("token");
 
-      const courseList = await fetchCollectionWithOfflineFallback({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-        collection: "courses",
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/courses`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch courses");
+      }
+
+      const courseList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.courses)
+          ? data.courses
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
 
       setCourses(courseList);
     } catch (err) {
-      setError(err.message || "Failed to load cached courses");
+      setError(err.message || "Failed to load courses");
+      setCourses([]);
     } finally {
       setLoading(false);
     }
@@ -101,19 +99,11 @@ function Courses() {
       const payload = {
         name: courseForm.name,
         instructor: courseForm.instructor,
-        credits: Number(courseForm.credits) || 0,
+        credits: courseForm.credits,
         color: courseForm.color,
         notes: courseForm.notes,
         status: courseForm.status,
       };
-
-      if (!navigator.onLine) {
-        const newCourse = queueCollectionCreate("courses", payload);
-        setCourses((prev) => [newCourse, ...prev]);
-        resetCourseForm();
-        setShowAddCourseModal(false);
-        return;
-      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/courses`,
@@ -135,27 +125,11 @@ function Courses() {
 
       const newCourse = data.course || data.data || data;
       setCourses((prev) => [newCourse, ...prev]);
-      saveCollectionItemToCache("courses", newCourse);
 
       resetCourseForm();
       setShowAddCourseModal(false);
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const payload = {
-          name: courseForm.name,
-          instructor: courseForm.instructor,
-          credits: Number(courseForm.credits) || 0,
-          color: courseForm.color,
-          notes: courseForm.notes,
-          status: courseForm.status,
-        };
-        const newCourse = queueCollectionCreate("courses", payload);
-        setCourses((prev) => [newCourse, ...prev]);
-        resetCourseForm();
-        setShowAddCourseModal(false);
-      } else {
-        setError(err.message || "Failed to add course");
-      }
+      setError(err.message || "Failed to add course");
     } finally {
       setSubmitting(false);
     }
@@ -193,28 +167,11 @@ function Courses() {
       const payload = {
         name: courseForm.name,
         instructor: courseForm.instructor,
-        credits: Number(courseForm.credits) || 0,
+        credits: courseForm.credits,
         color: courseForm.color,
         notes: courseForm.notes,
         status: courseForm.status,
       };
-
-      if (!navigator.onLine) {
-        const updatedCourse = queueCollectionUpdate(
-          "courses",
-          selectedCourse,
-          payload,
-        );
-        setCourses((prev) =>
-          prev.map((course) =>
-            course._id === selectedCourse._id ? updatedCourse : course,
-          ),
-        );
-        setSelectedCourse(updatedCourse);
-        setShowEditCourseModal(false);
-        resetCourseForm();
-        return;
-      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/courses/${selectedCourse._id}`,
@@ -241,37 +198,12 @@ function Courses() {
           course._id === selectedCourse._id ? updatedCourse : course,
         ),
       );
-      saveCollectionItemToCache("courses", updatedCourse);
 
       setSelectedCourse(updatedCourse);
       setShowEditCourseModal(false);
       resetCourseForm();
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const payload = {
-          name: courseForm.name,
-          instructor: courseForm.instructor,
-          credits: Number(courseForm.credits) || 0,
-          color: courseForm.color,
-          notes: courseForm.notes,
-          status: courseForm.status,
-        };
-        const updatedCourse = queueCollectionUpdate(
-          "courses",
-          selectedCourse,
-          payload,
-        );
-        setCourses((prev) =>
-          prev.map((course) =>
-            course._id === selectedCourse._id ? updatedCourse : course,
-          ),
-        );
-        setSelectedCourse(updatedCourse);
-        setShowEditCourseModal(false);
-        resetCourseForm();
-      } else {
-        setError(err.message || "Failed to update course");
-      }
+      setError(err.message || "Failed to update course");
     } finally {
       setSubmitting(false);
     }
@@ -285,12 +217,6 @@ function Courses() {
       setError("");
 
       const token = localStorage.getItem("token");
-
-      if (!navigator.onLine) {
-        queueCollectionDelete("courses", courseId);
-        setCourses((prev) => prev.filter((course) => course._id !== courseId));
-        return;
-      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/courses/${courseId}`,
@@ -315,12 +241,7 @@ function Courses() {
         setShowEditCourseModal(false);
       }
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        queueCollectionDelete("courses", courseId);
-        setCourses((prev) => prev.filter((course) => course._id !== courseId));
-      } else {
-        setError(err.message || "Failed to delete course");
-      }
+      setError(err.message || "Failed to delete course");
     }
   };
 
@@ -337,19 +258,6 @@ function Courses() {
         ...courseToUpdate,
         status: "completed",
       };
-
-      if (!navigator.onLine) {
-        const updatedCourse = queueCollectionUpdate(
-          "courses",
-          courseToUpdate,
-          payload,
-        );
-        setCourses((prev) =>
-          prev.map((course) => (course._id === courseId ? updatedCourse : course)),
-        );
-        if (selectedCourse?._id === courseId) setSelectedCourse(updatedCourse);
-        return;
-      }
 
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/courses/${courseId}`,
@@ -376,25 +284,12 @@ function Courses() {
           course._id === courseId ? updatedCourse : course,
         ),
       );
-      saveCollectionItemToCache("courses", updatedCourse);
 
       if (selectedCourse?._id === courseId) {
         setSelectedCourse(updatedCourse);
       }
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const courseToUpdate = courses.find((c) => c._id === courseId);
-        if (!courseToUpdate) return;
-        const updatedCourse = queueCollectionUpdate("courses", courseToUpdate, {
-          ...courseToUpdate,
-          status: "completed",
-        });
-        setCourses((prev) =>
-          prev.map((course) => (course._id === courseId ? updatedCourse : course)),
-        );
-      } else {
-        setError(err.message || "Failed to complete course");
-      }
+      setError(err.message || "Failed to complete course");
     }
   };
 
@@ -502,9 +397,9 @@ function Courses() {
               </p>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {filteredCourses.map((course, index) => (
+                {filteredCourses.map((course) => (
                   <div
-                    key={`${course._id || course.name}-${index}`}
+                    key={course._id}
                     className={`rounded-3xl border p-5 min-w-0 overflow-hidden ${
                       colorClasses[course.color] ||
                       "bg-base-100 border-base-300"
@@ -925,15 +820,6 @@ function Courses() {
         </>
       )}
     </DashboardLayout>
-  );
-}
-
-function isNetworkFailure(error) {
-  return (
-    error instanceof TypeError ||
-    /failed to fetch|networkerror|cors request did not succeed/i.test(
-      error?.message || "",
-    )
   );
 }
 

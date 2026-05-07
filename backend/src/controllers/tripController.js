@@ -19,20 +19,10 @@ function normalizeChecklist(checklist) {
 
 export async function createTrip(req, res, next) {
   try {
-    const {
-      tripName,
-      destination,
-      startDate,
-      endDate,
-      travelType,
-      notes,
-      checklist,
-    } = req.body;
+    const { tripName, destination, startDate, endDate, travelType, notes, checklist } = req.body;
 
     if (!tripName || !destination) {
-      return res
-        .status(400)
-        .json({ message: "Trip name and destination are required" });
+      return res.status(400).json({ message: "Trip name and destination are required" });
     }
 
     const trip = await Trip.create({
@@ -54,10 +44,7 @@ export async function createTrip(req, res, next) {
 
 export async function getTrips(req, res, next) {
   try {
-    const trips = await Trip.find({ user: req.user.userId }).sort({
-      startDate: 1,
-      createdAt: -1,
-    });
+    const trips = await Trip.find({ user: req.user.userId }).sort({ startDate: 1, createdAt: -1 });
     res.status(200).json({ trips });
   } catch (error) {
     next(error);
@@ -67,15 +54,7 @@ export async function getTrips(req, res, next) {
 export async function updateTrip(req, res, next) {
   try {
     const { id } = req.params;
-    const {
-      tripName,
-      destination,
-      startDate,
-      endDate,
-      travelType,
-      notes,
-      checklist,
-    } = req.body;
+    const { tripName, destination, startDate, endDate, travelType, notes, checklist } = req.body;
 
     const trip = await Trip.findOne({ _id: id, user: req.user.userId });
 
@@ -92,9 +71,7 @@ export async function updateTrip(req, res, next) {
     if (checklist !== undefined) trip.checklist = normalizeChecklist(checklist);
 
     const updatedTrip = await trip.save();
-    res
-      .status(200)
-      .json({ message: "Trip updated successfully", trip: updatedTrip });
+    res.status(200).json({ message: "Trip updated successfully", trip: updatedTrip });
   } catch (error) {
     next(error);
   }

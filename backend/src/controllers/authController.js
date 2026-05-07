@@ -26,24 +26,19 @@ const BASE_DEFAULT_PERSONAS = [
   },
   {
     name: "Travel",
-    description:
-      "Travel mode for organizing trips, transit tasks, and travel plans",
+    description: "Travel mode for organizing trips, transit tasks, and travel plans",
     color: "#8b5cf6",
   },
 ];
 
 const ADMIN_PERSONA = {
   name: "Admin",
-  description:
-    "Admin mode for managing users, system records, and application data",
+  description: "Admin mode for managing users, system records, and application data",
   color: "#111827",
 };
 
 function getDefaultPersonasForRole(userId, role) {
-  const personas =
-    role === "admin"
-      ? [ADMIN_PERSONA, ...BASE_DEFAULT_PERSONAS]
-      : BASE_DEFAULT_PERSONAS;
+  const personas = role === "admin" ? [ADMIN_PERSONA, ...BASE_DEFAULT_PERSONAS] : BASE_DEFAULT_PERSONAS;
 
   return personas.map((persona) => ({
     ...persona,
@@ -101,15 +96,12 @@ export async function registerUser(req, res, next) {
       email: normalizedEmail,
       password: hashedPassword,
       role,
-      personas:
-        role === "admin"
-          ? ["admin", "student", "work", "finance", "wellness", "travel"]
-          : ["student", "work", "finance", "wellness", "travel"],
+      personas: role === "admin"
+        ? ["admin", "student", "work", "finance", "wellness", "travel"]
+        : ["student", "work", "finance", "wellness", "travel"],
     });
 
-    const createdPersonas = await Persona.insertMany(
-      getDefaultPersonasForRole(user._id, role),
-    );
+    const createdPersonas = await Persona.insertMany(getDefaultPersonasForRole(user._id, role));
 
     res.status(201).json({
       message: "User registered successfully",
@@ -148,9 +140,7 @@ export async function loginUser(req, res, next) {
       });
     }
 
-    const personas = await Persona.find({ user: user._id }).sort({
-      createdAt: 1,
-    });
+    const personas = await Persona.find({ user: user._id }).sort({ createdAt: 1 });
 
     res.status(200).json({
       message: "Login successful",
@@ -172,9 +162,7 @@ export async function getMe(req, res, next) {
       });
     }
 
-    const personas = await Persona.find({ user: user._id }).sort({
-      createdAt: 1,
-    });
+    const personas = await Persona.find({ user: user._id }).sort({ createdAt: 1 });
 
     res.status(200).json({
       user: {

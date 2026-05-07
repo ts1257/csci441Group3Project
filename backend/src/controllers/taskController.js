@@ -2,19 +2,7 @@ import Task from "../models/Task.js";
 
 export async function createTask(req, res, next) {
   try {
-    const {
-      title,
-      description,
-      dueDate,
-      priority,
-      status,
-      persona,
-      courseId,
-      projectId,
-      taskType,
-      reminderTime,
-      tripId,
-    } = req.body;
+    const { title, description, dueDate, priority, status, persona, courseId, projectId, taskType, reminderTime, tripId } = req.body;
 
     if (!title || !persona) {
       return res.status(400).json({
@@ -71,20 +59,7 @@ export async function getTasks(req, res, next) {
 export async function updateTask(req, res, next) {
   try {
     const { id } = req.params;
-    const {
-      title,
-      description,
-      dueDate,
-      priority,
-      status,
-      persona,
-      courseId,
-      projectId,
-      taskType,
-      reminderTime,
-      tripId,
-      clientUpdatedAt,
-    } = req.body;
+    const { title, description, dueDate, priority, status, persona, courseId, projectId, taskType, reminderTime, tripId } = req.body;
 
     const task = await Task.findOne({
       _id: id,
@@ -95,20 +70,6 @@ export async function updateTask(req, res, next) {
       return res.status(404).json({
         message: "Task not found",
       });
-    }
-
-    if (clientUpdatedAt) {
-      const clientTimestamp = new Date(clientUpdatedAt).getTime();
-      const serverTimestamp = task.updatedAt
-        ? new Date(task.updatedAt).getTime()
-        : 0;
-
-      if (!Number.isNaN(clientTimestamp) && serverTimestamp > clientTimestamp) {
-        return res.status(200).json({
-          message: "Task already has newer cloud changes",
-          task,
-        });
-      }
     }
 
     if (persona !== undefined) task.persona = persona;

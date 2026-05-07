@@ -1,17 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import TaskManager from "../components/dashboard/TaskManager";
-import { fetchTasksWithOfflineFallback } from "../utils/offlineTasks";
-import {
-  queueCollectionUpdate,
-  saveCollectionItemToCache,
-} from "../utils/offlineCollections";
 
 const emptyChecklistForm = {
   tripId: "",
   text: "",
 };
-const TRIPS_CACHE_KEY = "mpp.trips.cache.v1";
 
 function Tasks() {
   return (
@@ -33,11 +27,7 @@ function Tasks() {
   );
 }
 
-function TasksContent({
-  selectedPersona,
-  selectedPersonaName,
-  displayPersonaName,
-}) {
+function TasksContent({ selectedPersona, selectedPersonaName, displayPersonaName }) {
   const normalizedPersona = selectedPersonaName?.toLowerCase().trim();
 
   if (normalizedPersona === "travel") {
@@ -53,11 +43,7 @@ function TasksContent({
   );
 }
 
-function StandardTasksContent({
-  selectedPersona,
-  selectedPersonaName,
-  displayPersonaName,
-}) {
+function StandardTasksContent({ selectedPersona, selectedPersonaName, displayPersonaName }) {
   const [tasks, setTasks] = useState([]);
   const [loadingStats, setLoadingStats] = useState(false);
 
@@ -71,10 +57,22 @@ function StandardTasksContent({
       try {
         setLoadingStats(true);
         const token = localStorage.getItem("token");
-        const { tasks: taskList } = await fetchTasksWithOfflineFallback({
-          apiUrl: import.meta.env.VITE_API_URL,
-          token,
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to fetch tasks");
+        }
+
+        const taskList = Array.isArray(data)
+          ? data
+          : Array.isArray(data.tasks)
+            ? data.tasks
+            : Array.isArray(data.data)
+              ? data.data
+              : [];
 
         setTasks(
           taskList.filter((task) => {
@@ -93,27 +91,16 @@ function StandardTasksContent({
 
   const stats = useMemo(() => {
     const total = tasks.length;
-    const completed = tasks.filter(
-      (task) => task.status === "completed",
-    ).length;
+    const completed = tasks.filter((task) => task.status === "completed").length;
     return { total, active: total - completed, completed };
   }, [tasks]);
 
   return (
     <>
       <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <StatCard
-          label="Total Tasks"
-          value={loadingStats ? "..." : stats.total}
-        />
-        <StatCard
-          label="Active Tasks"
-          value={loadingStats ? "..." : stats.active}
-        />
-        <StatCard
-          label="Completed Tasks"
-          value={loadingStats ? "..." : stats.completed}
-        />
+        <StatCard label="Total Tasks" value={loadingStats ? "..." : stats.total} />
+        <StatCard label="Active Tasks" value={loadingStats ? "..." : stats.active} />
+        <StatCard label="Completed Tasks" value={loadingStats ? "..." : stats.completed} />
       </div>
 
       <TaskManager
@@ -138,37 +125,16 @@ function TravelTasksContent() {
     try {
       setLoading(true);
       setError("");
-
-      if (!navigator.onLine) {
-        setTrips(readCachedTrips());
-        return;
-      }
-
       const token = localStorage.getItem("token");
-
-      let response;
-      try {
-        response = await fetch(`${import.meta.env.VITE_API_URL}/api/trips`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch {
-        setTrips(readCachedTrips());
-        return;
-      }
-
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/trips`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to load trips");
-      const tripList = Array.isArray(data) ? data : data.trips || data.data || [];
-      setTrips(tripList);
-      cacheTrips(tripList);
+      setTrips(Array.isArray(data) ? data : data.trips || data.data || []);
     } catch (err) {
-      const cachedTrips = readCachedTrips();
-      if (cachedTrips.length) {
-        setTrips(cachedTrips);
-      } else {
-        setError(err.message || "Failed to load trips");
-        setTrips([]);
-      }
+      setError(err.message || "Failed to load trips");
+      setTrips([]);
     } finally {
       setLoading(false);
     }
@@ -211,10 +177,7 @@ function TravelTasksContent() {
       return;
     }
 
-    const checklist = [
-      ...(trip.checklist || []),
-      { text: form.text.trim(), completed: false },
-    ];
+    const checklist = [...(trip.checklist || []), { text: form.text.trim(), completed: false }];
     await updateTripChecklist(trip, checklist, () => {
       closeModal();
     });
@@ -223,48 +186,22 @@ function TravelTasksContent() {
   const updateTripChecklist = async (trip, checklist, afterSuccess = null) => {
     try {
       setSubmitting(true);
-      const payload = { checklist };
-
-      if (!navigator.onLine) {
-        const updatedTrip = queueCollectionUpdate("trips", trip, payload);
-        setTrips((prev) =>
-          prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)),
-        );
-        afterSuccess?.();
-        return;
-      }
-
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/trips/${trip._id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/trips/${trip._id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify({ checklist }),
+      });
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message || "Failed to update checklist");
+      if (!response.ok) throw new Error(data.message || "Failed to update checklist");
       const updatedTrip = data.trip || data.data || data;
-      setTrips((prev) =>
-        prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)),
-      );
-      saveCollectionItemToCache("trips", updatedTrip);
+      setTrips((prev) => prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)));
       afterSuccess?.();
     } catch (err) {
-      if (isNetworkFailure(err)) {
-        const updatedTrip = queueCollectionUpdate("trips", trip, { checklist });
-        setTrips((prev) =>
-          prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)),
-        );
-        afterSuccess?.();
-      } else {
-        setError(err.message || "Failed to update checklist");
-      }
+      setError(err.message || "Failed to update checklist");
     } finally {
       setSubmitting(false);
     }
@@ -278,9 +215,7 @@ function TravelTasksContent() {
   };
 
   const deleteChecklistItem = async (trip, itemIndex) => {
-    const checklist = (trip.checklist || []).filter(
-      (_, index) => index !== itemIndex,
-    );
+    const checklist = (trip.checklist || []).filter((_, index) => index !== itemIndex);
     await updateTripChecklist(trip, checklist);
   };
 
@@ -296,75 +231,45 @@ function TravelTasksContent() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold md:text-3xl">Tasks</h2>
-            <p className="mt-1 text-sm opacity-70">
-              Travel tasks are checklist items added to existing trips.
-            </p>
+            <p className="mt-1 text-sm opacity-70">Travel tasks are checklist items added to existing trips.</p>
           </div>
-          <button
-            className="btn btn-primary rounded-2xl"
-            onClick={openAddModal}
-            disabled={trips.length === 0}
-          >
+          <button className="btn btn-primary rounded-2xl" onClick={openAddModal} disabled={trips.length === 0}>
             Add Checklist Task
           </button>
         </div>
 
-        {error && (
-          <div className="alert alert-error mt-5 rounded-2xl text-sm">
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-error mt-5 rounded-2xl text-sm">{error}</div>}
 
         {loading ? (
           <p className="mt-6 opacity-70">Loading trips...</p>
         ) : trips.length === 0 ? (
-          <p className="mt-6 opacity-70">
-            No trips found. Add a trip from the Trips page before adding
-            checklist tasks.
-          </p>
+          <p className="mt-6 opacity-70">No trips found. Add a trip from the Trips page before adding checklist tasks.</p>
         ) : (
           <div className="mt-6 space-y-4">
-            {trips.map((trip, tripIndex) => (
-              <div
-                key={`${trip._id || trip.tripName}-${tripIndex}`}
-                className="rounded-3xl border border-base-300 p-5"
-              >
+            {trips.map((trip) => (
+              <div key={trip._id} className="rounded-3xl border border-base-300 p-5">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h3 className="text-lg font-semibold">{trip.tripName}</h3>
                     <p className="text-sm opacity-70">{trip.destination}</p>
                   </div>
-                  <span className="badge badge-outline">
-                    Start: {formatDate(trip.startDate)}
-                  </span>
+                  <span className="badge badge-outline">Start: {formatDate(trip.startDate)}</span>
                 </div>
 
                 {(trip.checklist || []).length === 0 ? (
-                  <p className="mt-4 text-sm opacity-70">
-                    No checklist tasks for this trip.
-                  </p>
+                  <p className="mt-4 text-sm opacity-70">No checklist tasks for this trip.</p>
                 ) : (
                   <div className="mt-4 space-y-2">
                     {(trip.checklist || []).map((item, index) => (
-                      <div
-                        key={`${trip._id || trip.tripName}-${item._id || index}`}
-                        className="flex items-center gap-3 rounded-2xl bg-base-200 px-4 py-3"
-                      >
+                      <div key={`${trip._id}-${index}`} className="flex items-center gap-3 rounded-2xl bg-base-200 px-4 py-3">
                         <input
                           type="checkbox"
                           className="checkbox checkbox-primary"
                           checked={item.completed}
                           onChange={() => toggleChecklistItem(trip, index)}
                         />
-                        <span
-                          className={`flex-1 ${item.completed ? "line-through opacity-60" : ""}`}
-                        >
-                          {item.text}
-                        </span>
-                        <button
-                          className="btn btn-ghost btn-xs rounded-xl"
-                          onClick={() => deleteChecklistItem(trip, index)}
-                        >
+                        <span className={`flex-1 ${item.completed ? "line-through opacity-60" : ""}`}>{item.text}</span>
+                        <button className="btn btn-ghost btn-xs rounded-xl" onClick={() => deleteChecklistItem(trip, index)}>
                           Delete
                         </button>
                       </div>
@@ -382,12 +287,7 @@ function TravelTasksContent() {
           <div className="w-full max-w-xl rounded-4xl bg-base-100 p-5 shadow-xl md:p-6">
             <div className="mb-5 flex items-center justify-between gap-4">
               <h2 className="text-2xl font-bold">Add Checklist Task</h2>
-              <button
-                className="btn btn-ghost btn-sm rounded-xl"
-                onClick={closeModal}
-              >
-                ✕
-              </button>
+              <button className="btn btn-ghost btn-sm rounded-xl" onClick={closeModal}>✕</button>
             </div>
 
             <form onSubmit={handleAddChecklist} className="space-y-4">
@@ -396,9 +296,7 @@ function TravelTasksContent() {
                 <select
                   name="tripId"
                   value={form.tripId}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, tripId: e.target.value }))
-                  }
+                  onChange={(e) => setForm((prev) => ({ ...prev, tripId: e.target.value }))}
                   className="select select-bordered w-full rounded-2xl"
                 >
                   {trips.map((trip) => (
@@ -410,62 +308,25 @@ function TravelTasksContent() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Checklist Task
-                </label>
+                <label className="mb-2 block text-sm font-medium">Checklist Task</label>
                 <input
                   type="text"
                   value={form.text}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, text: e.target.value }))
-                  }
+                  onChange={(e) => setForm((prev) => ({ ...prev, text: e.target.value }))}
                   className="input input-bordered w-full rounded-2xl"
                   placeholder="Pack passport, confirm hotel, arrange transport"
                 />
               </div>
 
               <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  className="btn rounded-2xl"
-                  onClick={closeModal}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary rounded-2xl"
-                  disabled={submitting}
-                >
-                  {submitting ? "Saving..." : "Add Task"}
-                </button>
+                <button type="button" className="btn rounded-2xl" onClick={closeModal}>Cancel</button>
+                <button type="submit" className="btn btn-primary rounded-2xl" disabled={submitting}>{submitting ? "Saving..." : "Add Task"}</button>
               </div>
             </form>
           </div>
         </div>
       )}
     </>
-  );
-}
-
-function readCachedTrips() {
-  try {
-    return JSON.parse(localStorage.getItem(TRIPS_CACHE_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function cacheTrips(trips) {
-  localStorage.setItem(TRIPS_CACHE_KEY, JSON.stringify(trips));
-}
-
-function isNetworkFailure(error) {
-  return (
-    error instanceof TypeError ||
-    /failed to fetch|networkerror|cors request did not succeed/i.test(
-      error?.message || "",
-    )
   );
 }
 
@@ -476,9 +337,7 @@ function getChecklistStats(trips) {
   const result = { today: 0, upcoming: 0, overdue: 0 };
 
   trips.forEach((trip) => {
-    const pendingItems = (trip.checklist || []).filter(
-      (item) => !item.completed,
-    ).length;
+    const pendingItems = (trip.checklist || []).filter((item) => !item.completed).length;
     if (pendingItems === 0) return;
 
     const startDate = parseLocalDate(trip.startDate);
@@ -504,9 +363,7 @@ function getChecklistStats(trips) {
 
 function parseLocalDate(dateString) {
   if (!dateString) return null;
-  const datePart = dateString.includes("T")
-    ? dateString.split("T")[0]
-    : dateString;
+  const datePart = dateString.includes("T") ? dateString.split("T")[0] : dateString;
   const [year, month, day] = datePart.split("-").map(Number);
   return new Date(year, month - 1, day);
 }

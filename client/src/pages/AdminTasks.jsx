@@ -29,14 +29,11 @@ function AdminDataContent() {
       setLoading(true);
       setError("");
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/admin/data`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/data`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
       const result = await response.json();
 
       if (!response.ok) {
@@ -142,9 +139,7 @@ function AdminDataContent() {
 
       setData((prev) => ({
         ...prev,
-        [resource]: (prev[resource] || []).filter(
-          (record) => record._id !== item._id,
-        ),
+        [resource]: (prev[resource] || []).filter((record) => record._id !== item._id),
       }));
     } catch (err) {
       setError(err.message || "Failed to delete record");
@@ -153,10 +148,7 @@ function AdminDataContent() {
 
   const actionButtons = (resource, item, label) => (
     <div className="flex justify-end gap-2" key="actions">
-      <button
-        className="btn btn-outline btn-sm rounded-xl"
-        onClick={() => openEdit(resource, item, label)}
-      >
+      <button className="btn btn-outline btn-sm rounded-xl" onClick={() => openEdit(resource, item, label)}>
         Edit
       </button>
       <DeleteButton onClick={() => deleteItem(resource, item, label)} />
@@ -177,9 +169,7 @@ function AdminDataContent() {
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold md:text-3xl">Manage Tasks</h2>
-                <p className="mt-1 text-sm opacity-70">
-                  Review, edit, and delete tasks across all users.
-                </p>
+                <p className="mt-1 text-sm opacity-70">Review, edit, and delete tasks across all users.</p>
               </div>
 
               <select
@@ -198,28 +188,13 @@ function AdminDataContent() {
 
             <ScrollableTable
               emptyText="No tasks found."
-              headers={[
-                "Task",
-                "Persona",
-                "Owner",
-                "Due Date",
-                "Status",
-                "Actions",
-              ]}
+              headers={["Task", "Persona", "Owner", "Due Date", "Status", "Actions"]}
               rows={filteredTasks.map((task) => [
-                <RecordTitle
-                  key="task"
-                  title={task.title}
-                  subtitle={task.description}
-                />,
-                <span key="persona" className="capitalize">
-                  {task.persona}
-                </span>,
+                <RecordTitle key="task" title={task.title} subtitle={task.description} />,
+                <span key="persona" className="capitalize">{task.persona}</span>,
                 task.user?.email || "Unknown",
                 formatDate(task.dueDate),
-                <span key="status" className="badge badge-ghost capitalize">
-                  {task.status}
-                </span>,
+                <span key="status" className="badge badge-ghost capitalize">{task.status}</span>,
                 actionButtons("tasks", task, "task"),
               ])}
             />
@@ -229,21 +204,9 @@ function AdminDataContent() {
             title="Manage Trips"
             description="Review, edit, and delete travel trips created by users. Checklist items are managed from Travel Tasks."
             emptyText="No trips found."
-            headers={[
-              "Trip",
-              "Destination",
-              "Owner",
-              "Start",
-              "End",
-              "Checklist",
-              "Actions",
-            ]}
+            headers={["Trip", "Destination", "Owner", "Start", "End", "Checklist", "Actions"]}
             rows={(data.trips || []).map((trip) => [
-              <RecordTitle
-                key="trip"
-                title={trip.tripName}
-                subtitle={trip.notes}
-              />,
+              <RecordTitle key="trip" title={trip.tripName} subtitle={trip.notes} />,
               trip.destination || "N/A",
               trip.user?.email || "Unknown",
               formatDate(trip.startDate),
@@ -257,26 +220,10 @@ function AdminDataContent() {
             title="Manage Habits"
             description="Review, edit, and delete wellness habits created by users."
             emptyText="No habits found."
-            headers={[
-              "Habit",
-              "Category",
-              "Owner",
-              "Goal",
-              "Progress",
-              "Status",
-              "Actions",
-            ]}
+            headers={["Habit", "Category", "Owner", "Goal", "Progress", "Status", "Actions"]}
             rows={(data.habits || []).map((habit) => [
-              <RecordTitle
-                key="habit"
-                title={habit.name}
-                subtitle={
-                  habit.reminderTime ? `Reminder: ${habit.reminderTime}` : ""
-                }
-              />,
-              <span key="category" className="capitalize">
-                {habit.category?.replace("-", " ") || "N/A"}
-              </span>,
+              <RecordTitle key="habit" title={habit.name} subtitle={habit.reminderTime ? `Reminder: ${habit.reminderTime}` : ""} />,
+              <span key="category" className="capitalize">{habit.category?.replace("-", " ") || "N/A"}</span>,
               habit.user?.email || "Unknown",
               formatUnitValue(habit.goal, habit.unit),
               formatUnitValue(habit.progress, habit.unit),
@@ -289,29 +236,13 @@ function AdminDataContent() {
             title="Manage Finance Records"
             description="Review, edit, and delete income and expense records."
             emptyText="No finance records found."
-            headers={[
-              "Record",
-              "Type",
-              "Owner",
-              "Amount",
-              "Category",
-              "Date",
-              "Actions",
-            ]}
+            headers={["Record", "Type", "Owner", "Amount", "Category", "Date", "Actions"]}
             rows={(data.records || []).map((record) => [
-              <RecordTitle
-                key="record"
-                title={record.title}
-                subtitle={record.notes}
-              />,
-              <span key="type" className="capitalize">
-                {record.type}
-              </span>,
+              <RecordTitle key="record" title={record.title} subtitle={record.notes} />,
+              <span key="type" className="capitalize">{record.type}</span>,
               record.user?.email || "Unknown",
               formatMoney(record.amount),
-              record.subcategory
-                ? `${record.category} / ${record.subcategory}`
-                : record.category,
+              record.subcategory ? `${record.category} / ${record.subcategory}` : record.category,
               formatDate(record.date),
               actionButtons("records", record, "finance record"),
             ])}
@@ -321,26 +252,13 @@ function AdminDataContent() {
             title="Manage Planned Payments"
             description="Review, edit, and delete planned payments and due bills."
             emptyText="No planned payments found."
-            headers={[
-              "Payment",
-              "Owner",
-              "Amount",
-              "Due Date",
-              "Status",
-              "Actions",
-            ]}
+            headers={["Payment", "Owner", "Amount", "Due Date", "Status", "Actions"]}
             rows={(data.plannedPayments || []).map((payment) => [
-              <RecordTitle
-                key="payment"
-                title={payment.title}
-                subtitle={payment.notes}
-              />,
+              <RecordTitle key="payment" title={payment.title} subtitle={payment.notes} />,
               payment.user?.email || "Unknown",
               formatMoney(payment.amount),
               formatDate(payment.dueDate),
-              <span key="status" className="badge badge-ghost capitalize">
-                {payment.status}
-              </span>,
+              <span key="status" className="badge badge-ghost capitalize">{payment.status}</span>,
               actionButtons("plannedPayments", payment, "planned payment"),
             ])}
           />
@@ -349,26 +267,13 @@ function AdminDataContent() {
             title="Manage Courses"
             description="Review, edit, and delete student courses."
             emptyText="No courses found."
-            headers={[
-              "Course",
-              "Instructor",
-              "Owner",
-              "Credits",
-              "Status",
-              "Actions",
-            ]}
+            headers={["Course", "Instructor", "Owner", "Credits", "Status", "Actions"]}
             rows={(data.courses || []).map((course) => [
-              <RecordTitle
-                key="course"
-                title={course.name}
-                subtitle={course.notes}
-              />,
+              <RecordTitle key="course" title={course.name} subtitle={course.notes} />,
               course.instructor || "N/A",
               course.user?.email || "Unknown",
               course.credits ?? 0,
-              <span key="status" className="badge badge-ghost capitalize">
-                {course.status}
-              </span>,
+              <span key="status" className="badge badge-ghost capitalize">{course.status}</span>,
               actionButtons("courses", course, "course"),
             ])}
           />
@@ -377,26 +282,13 @@ function AdminDataContent() {
             title="Manage Projects"
             description="Review, edit, and delete work projects."
             emptyText="No projects found."
-            headers={[
-              "Project",
-              "Client",
-              "Owner",
-              "Budget",
-              "Status",
-              "Actions",
-            ]}
+            headers={["Project", "Client", "Owner", "Budget", "Status", "Actions"]}
             rows={(data.projects || []).map((project) => [
-              <RecordTitle
-                key="project"
-                title={project.name}
-                subtitle={project.description || project.notes}
-              />,
+              <RecordTitle key="project" title={project.name} subtitle={project.description || project.notes} />,
               project.client || "N/A",
               project.user?.email || "Unknown",
               formatMoney(project.budget),
-              <span key="status" className="badge badge-ghost capitalize">
-                {project.status}
-              </span>,
+              <span key="status" className="badge badge-ghost capitalize">{project.status}</span>,
               actionButtons("projects", project, "project"),
             ])}
           />
@@ -405,13 +297,7 @@ function AdminDataContent() {
             title="Manage Categories"
             description="Review, edit, and delete finance categories and subcategories."
             emptyText="No categories found."
-            headers={[
-              "Category",
-              "Owner",
-              "Subcategories",
-              "Created",
-              "Actions",
-            ]}
+            headers={["Category", "Owner", "Subcategories", "Created", "Actions"]}
             rows={(data.categories || []).map((category) => [
               <RecordTitle key="category" title={category.name} />,
               category.user?.email || "Unknown",
@@ -461,10 +347,7 @@ function ScrollableTable({ emptyText, headers, rows }) {
           <thead>
             <tr>
               {headers.map((header) => (
-                <th
-                  key={header}
-                  className={header === "Actions" ? "text-right" : ""}
-                >
+                <th key={header} className={header === "Actions" ? "text-right" : ""}>
                   {header}
                 </th>
               ))}
@@ -474,12 +357,7 @@ function ScrollableTable({ emptyText, headers, rows }) {
             {rows.map((row, rowIndex) => (
               <tr key={rowIndex}>
                 {row.map((cell, cellIndex) => (
-                  <td
-                    key={cellIndex}
-                    className={
-                      headers[cellIndex] === "Actions" ? "text-right" : ""
-                    }
-                  >
+                  <td key={cellIndex} className={headers[cellIndex] === "Actions" ? "text-right" : ""}>
                     {cell}
                   </td>
                 ))}
@@ -499,12 +377,10 @@ function ResourceEditModal(props) {
   if (editing.resource === "trips") return <TripEditModal {...props} />;
   if (editing.resource === "habits") return <HabitEditModal {...props} />;
   if (editing.resource === "records") return <RecordEditModal {...props} />;
-  if (editing.resource === "plannedPayments")
-    return <PlannedPaymentEditModal {...props} />;
+  if (editing.resource === "plannedPayments") return <PlannedPaymentEditModal {...props} />;
   if (editing.resource === "courses") return <CourseEditModal {...props} />;
   if (editing.resource === "projects") return <ProjectEditModal {...props} />;
-  if (editing.resource === "categories")
-    return <CategoryEditModal {...props} />;
+  if (editing.resource === "categories") return <CategoryEditModal {...props} />;
 
   return null;
 }
@@ -518,11 +394,7 @@ function ModalShell({ title, subtitle, children, saving, onCancel, onSubmit }) {
             <h2 className="text-2xl font-bold">{title}</h2>
             {subtitle && <p className="mt-1 text-sm opacity-70">{subtitle}</p>}
           </div>
-          <button
-            className="btn btn-ghost btn-sm rounded-xl"
-            onClick={onCancel}
-            type="button"
-          >
+          <button className="btn btn-ghost btn-sm rounded-xl" onClick={onCancel} type="button">
             ✕
           </button>
         </div>
@@ -531,18 +403,10 @@ function ModalShell({ title, subtitle, children, saving, onCancel, onSubmit }) {
           {children}
 
           <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              className="btn btn-ghost rounded-2xl"
-              onClick={onCancel}
-            >
+            <button type="button" className="btn btn-ghost rounded-2xl" onClick={onCancel}>
               Cancel
             </button>
-            <button
-              type="submit"
-              className="btn btn-primary rounded-2xl"
-              disabled={saving}
-            >
+            <button type="submit" className="btn btn-primary rounded-2xl" disabled={saving}>
               {saving ? "Saving..." : "Save Changes"}
             </button>
           </div>
@@ -552,15 +416,7 @@ function ModalShell({ title, subtitle, children, saving, onCancel, onSubmit }) {
   );
 }
 
-function TextField({
-  label,
-  name,
-  value,
-  onChange,
-  placeholder = "",
-  type = "text",
-  required = false,
-}) {
+function TextField({ label, name, value, onChange, placeholder = "", type = "text", required = false }) {
   return (
     <div>
       <label className="mb-2 block text-sm font-medium">{label}</label>
@@ -577,14 +433,7 @@ function TextField({
   );
 }
 
-function TextAreaField({
-  label,
-  name,
-  value,
-  onChange,
-  placeholder = "",
-  rows = "3",
-}) {
+function TextAreaField({ label, name, value, onChange, placeholder = "", rows = "3" }) {
   return (
     <div>
       <label className="mb-2 block text-sm font-medium">{label}</label>
@@ -611,9 +460,7 @@ function SelectField({ label, name, value, onChange, options }) {
         className="select select-bordered w-full rounded-2xl"
       >
         {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
+          <option key={option.value} value={option.value}>{option.label}</option>
         ))}
       </select>
     </div>
@@ -622,110 +469,36 @@ function SelectField({ label, name, value, onChange, options }) {
 
 function TaskEditModal({ form, saving, onChange, onCancel, onSubmit }) {
   return (
-    <ModalShell
-      title="Edit Task"
-      subtitle="Same task edit form style used on the Tasks page."
-      saving={saving}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <TextField
-        label="Title"
-        name="title"
-        value={form.title}
-        onChange={onChange}
-        placeholder="Enter task title"
-        required
-      />
+    <ModalShell title="Edit Task" subtitle="Same task edit form style used on the Tasks page." saving={saving} onCancel={onCancel} onSubmit={onSubmit}>
+      <TextField label="Title" name="title" value={form.title} onChange={onChange} placeholder="Enter task title" required />
 
-      <SelectField
-        label="Persona"
-        name="persona"
-        value={form.persona}
-        onChange={onChange}
-        options={personaOptions()}
-      />
+      <SelectField label="Persona" name="persona" value={form.persona} onChange={onChange} options={personaOptions()} />
 
       {form.persona === "student" && (
-        <TextField
-          label="Course"
-          name="courseId"
-          value={form.courseId}
-          onChange={onChange}
-          placeholder="Enter or select a course"
-        />
+        <TextField label="Course" name="courseId" value={form.courseId} onChange={onChange} placeholder="Enter or select a course" />
       )}
 
       {form.persona === "work" && (
-        <TextField
-          label="Project"
-          name="projectId"
-          value={form.projectId}
-          onChange={onChange}
-          placeholder="Enter or select a project"
-        />
+        <TextField label="Project" name="projectId" value={form.projectId} onChange={onChange} placeholder="Enter or select a project" />
       )}
 
       {form.persona === "wellness" && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <SelectField
-            label="Wellness Task Type"
-            name="taskType"
-            value={form.taskType}
-            onChange={onChange}
-            options={wellnessTaskTypeOptions()}
-          />
-          <TextField
-            label="Reminder Time"
-            name="reminderTime"
-            type="time"
-            value={form.reminderTime}
-            onChange={onChange}
-          />
+          <SelectField label="Wellness Task Type" name="taskType" value={form.taskType} onChange={onChange} options={wellnessTaskTypeOptions()} />
+          <TextField label="Reminder Time" name="reminderTime" type="time" value={form.reminderTime} onChange={onChange} />
         </div>
       )}
 
       {form.persona === "travel" && (
-        <TextField
-          label="Trip ID"
-          name="tripId"
-          value={form.tripId}
-          onChange={onChange}
-          placeholder="Related trip ID"
-        />
+        <TextField label="Trip ID" name="tripId" value={form.tripId} onChange={onChange} placeholder="Related trip ID" />
       )}
 
-      <TextAreaField
-        label="Description"
-        name="description"
-        value={form.description}
-        onChange={onChange}
-        placeholder="Enter description"
-        rows="4"
-      />
-      <TextField
-        label="Due Date"
-        name="dueDate"
-        type="date"
-        value={form.dueDate}
-        onChange={onChange}
-      />
+      <TextAreaField label="Description" name="description" value={form.description} onChange={onChange} placeholder="Enter description" rows="4" />
+      <TextField label="Due Date" name="dueDate" type="date" value={form.dueDate} onChange={onChange} />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField
-          label="Priority"
-          name="priority"
-          value={form.priority}
-          onChange={onChange}
-          options={priorityOptions()}
-        />
-        <SelectField
-          label="Status"
-          name="status"
-          value={form.status}
-          onChange={onChange}
-          options={taskStatusOptions()}
-        />
+        <SelectField label="Priority" name="priority" value={form.priority} onChange={onChange} options={priorityOptions()} />
+        <SelectField label="Status" name="status" value={form.status} onChange={onChange} options={taskStatusOptions()} />
       </div>
     </ModalShell>
   );
@@ -733,122 +506,35 @@ function TaskEditModal({ form, saving, onChange, onCancel, onSubmit }) {
 
 function TripEditModal({ form, saving, onChange, onCancel, onSubmit }) {
   return (
-    <ModalShell
-      title="Edit Trip"
-      subtitle="This matches the Trips page modal. Checklist tasks stay on the Travel Tasks page."
-      saving={saving}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <TextField
-        label="Trip Name"
-        name="tripName"
-        value={form.tripName}
-        onChange={onChange}
-        placeholder="New York Conference"
-        required
-      />
-      <TextField
-        label="Destination"
-        name="destination"
-        value={form.destination}
-        onChange={onChange}
-        placeholder="New York"
-        required
-      />
+    <ModalShell title="Edit Trip" subtitle="This matches the Trips page modal. Checklist tasks stay on the Travel Tasks page." saving={saving} onCancel={onCancel} onSubmit={onSubmit}>
+      <TextField label="Trip Name" name="tripName" value={form.tripName} onChange={onChange} placeholder="New York Conference" required />
+      <TextField label="Destination" name="destination" value={form.destination} onChange={onChange} placeholder="New York" required />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          label="Start Date"
-          name="startDate"
-          type="date"
-          value={form.startDate}
-          onChange={onChange}
-        />
-        <TextField
-          label="End Date"
-          name="endDate"
-          type="date"
-          value={form.endDate}
-          onChange={onChange}
-        />
+        <TextField label="Start Date" name="startDate" type="date" value={form.startDate} onChange={onChange} />
+        <TextField label="End Date" name="endDate" type="date" value={form.endDate} onChange={onChange} />
       </div>
 
-      <SelectField
-        label="Travel Type"
-        name="travelType"
-        value={form.travelType}
-        onChange={onChange}
-        options={travelTypeOptions()}
-      />
-      <TextAreaField
-        label="Notes"
-        name="notes"
-        value={form.notes}
-        onChange={onChange}
-        placeholder="Hotel check-in, terminal, transport notes"
-      />
+      <SelectField label="Travel Type" name="travelType" value={form.travelType} onChange={onChange} options={travelTypeOptions()} />
+      <TextAreaField label="Notes" name="notes" value={form.notes} onChange={onChange} placeholder="Hotel check-in, terminal, transport notes" />
     </ModalShell>
   );
 }
 
 function HabitEditModal({ form, saving, onChange, onCancel, onSubmit }) {
   return (
-    <ModalShell
-      title="Edit Habit"
-      subtitle="This matches the Habits page modal."
-      saving={saving}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <TextField
-        label="Habit Name"
-        name="name"
-        value={form.name}
-        onChange={onChange}
-        placeholder="Drink water"
-        required
-      />
-      <SelectField
-        label="Category"
-        name="category"
-        value={form.category}
-        onChange={onChange}
-        options={habitCategoryOptions()}
-      />
+    <ModalShell title="Edit Habit" subtitle="This matches the Habits page modal." saving={saving} onCancel={onCancel} onSubmit={onSubmit}>
+      <TextField label="Habit Name" name="name" value={form.name} onChange={onChange} placeholder="Drink water" required />
+      <SelectField label="Category" name="category" value={form.category} onChange={onChange} options={habitCategoryOptions()} />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <TextField
-          label="Goal"
-          name="goal"
-          value={form.goal}
-          onChange={onChange}
-          placeholder="8"
-        />
-        <TextField
-          label="Progress"
-          name="progress"
-          value={form.progress}
-          onChange={onChange}
-          placeholder="4"
-        />
-        <TextField
-          label="Unit"
-          name="unit"
-          value={form.unit}
-          onChange={onChange}
-          placeholder="cups, pages, minutes"
-        />
+        <TextField label="Goal" name="goal" value={form.goal} onChange={onChange} placeholder="8" />
+        <TextField label="Progress" name="progress" value={form.progress} onChange={onChange} placeholder="4" />
+        <TextField label="Unit" name="unit" value={form.unit} onChange={onChange} placeholder="cups, pages, minutes" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          label="Reminder Time"
-          name="reminderTime"
-          type="time"
-          value={form.reminderTime}
-          onChange={onChange}
-        />
+        <TextField label="Reminder Time" name="reminderTime" type="time" value={form.reminderTime} onChange={onChange} />
         <label className="flex items-center gap-3 rounded-2xl border border-base-300 p-4">
           <input
             type="checkbox"
@@ -866,306 +552,98 @@ function HabitEditModal({ form, saving, onChange, onCancel, onSubmit }) {
 
 function RecordEditModal({ form, saving, onChange, onCancel, onSubmit }) {
   return (
-    <ModalShell
-      title="Edit Record"
-      subtitle="This matches the Finance Records page modal."
-      saving={saving}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <TextField
-        label="Title"
-        name="title"
-        value={form.title}
-        onChange={onChange}
-        placeholder="Paycheck, groceries, gas"
-        required
-      />
+    <ModalShell title="Edit Record" subtitle="This matches the Finance Records page modal." saving={saving} onCancel={onCancel} onSubmit={onSubmit}>
+      <TextField label="Title" name="title" value={form.title} onChange={onChange} placeholder="Paycheck, groceries, gas" required />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField
-          label="Type"
-          name="type"
-          value={form.type}
-          onChange={onChange}
-          options={recordTypeOptions()}
-        />
-        <TextField
-          label="Amount"
-          name="amount"
-          type="number"
-          value={form.amount}
-          onChange={onChange}
-          placeholder="100"
-        />
+        <SelectField label="Type" name="type" value={form.type} onChange={onChange} options={recordTypeOptions()} />
+        <TextField label="Amount" name="amount" type="number" value={form.amount} onChange={onChange} placeholder="100" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          label="Category"
-          name="category"
-          value={form.category}
-          onChange={onChange}
-          placeholder="Food, Salary, Transport"
-        />
-        <TextField
-          label="Subcategory"
-          name="subcategory"
-          value={form.subcategory}
-          onChange={onChange}
-          placeholder="Groceries, Bonus"
-        />
+        <TextField label="Category" name="category" value={form.category} onChange={onChange} placeholder="Food, Salary, Transport" />
+        <TextField label="Subcategory" name="subcategory" value={form.subcategory} onChange={onChange} placeholder="Groceries, Bonus" />
       </div>
 
-      <TextField
-        label="Date"
-        name="date"
-        type="date"
-        value={form.date}
-        onChange={onChange}
-      />
-      <TextAreaField
-        label="Notes"
-        name="notes"
-        value={form.notes}
-        onChange={onChange}
-        placeholder="Optional notes"
-      />
+      <TextField label="Date" name="date" type="date" value={form.date} onChange={onChange} />
+      <TextAreaField label="Notes" name="notes" value={form.notes} onChange={onChange} placeholder="Optional notes" />
     </ModalShell>
   );
 }
 
-function PlannedPaymentEditModal({
-  form,
-  saving,
-  onChange,
-  onCancel,
-  onSubmit,
-}) {
+function PlannedPaymentEditModal({ form, saving, onChange, onCancel, onSubmit }) {
   return (
-    <ModalShell
-      title="Edit Planned Payment"
-      subtitle="This matches the Planned Payments page modal."
-      saving={saving}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <TextField
-        label="Title"
-        name="title"
-        value={form.title}
-        onChange={onChange}
-        placeholder="Rent, phone bill, textbook"
-        required
-      />
+    <ModalShell title="Edit Planned Payment" subtitle="This matches the Planned Payments page modal." saving={saving} onCancel={onCancel} onSubmit={onSubmit}>
+      <TextField label="Title" name="title" value={form.title} onChange={onChange} placeholder="Rent, phone bill, textbook" required />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          label="Amount"
-          name="amount"
-          type="number"
-          value={form.amount}
-          onChange={onChange}
-          placeholder="100"
-        />
-        <TextField
-          label="Due Date"
-          name="dueDate"
-          type="date"
-          value={form.dueDate}
-          onChange={onChange}
-        />
+        <TextField label="Amount" name="amount" type="number" value={form.amount} onChange={onChange} placeholder="100" />
+        <TextField label="Due Date" name="dueDate" type="date" value={form.dueDate} onChange={onChange} />
       </div>
 
-      <SelectField
-        label="Status"
-        name="status"
-        value={form.status}
-        onChange={onChange}
-        options={paymentStatusOptions()}
-      />
-      <TextAreaField
-        label="Notes"
-        name="notes"
-        value={form.notes}
-        onChange={onChange}
-        placeholder="Optional notes"
-      />
+      <SelectField label="Status" name="status" value={form.status} onChange={onChange} options={paymentStatusOptions()} />
+      <TextAreaField label="Notes" name="notes" value={form.notes} onChange={onChange} placeholder="Optional notes" />
     </ModalShell>
   );
 }
 
 function CourseEditModal({ form, saving, onChange, onCancel, onSubmit }) {
   return (
-    <ModalShell
-      title="Edit Course"
-      subtitle="This matches the Courses page modal."
-      saving={saving}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <TextField
-        label="Course Name"
-        name="name"
-        value={form.name}
-        onChange={onChange}
-        placeholder="Software Engineering"
-        required
-      />
-      <TextField
-        label="Instructor"
-        name="instructor"
-        value={form.instructor}
-        onChange={onChange}
-        placeholder="Professor name"
-      />
+    <ModalShell title="Edit Course" subtitle="This matches the Courses page modal." saving={saving} onCancel={onCancel} onSubmit={onSubmit}>
+      <TextField label="Course Name" name="name" value={form.name} onChange={onChange} placeholder="Software Engineering" required />
+      <TextField label="Instructor" name="instructor" value={form.instructor} onChange={onChange} placeholder="Professor name" />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <TextField
-          label="Credits"
-          name="credits"
-          type="number"
-          value={form.credits}
-          onChange={onChange}
-        />
-        <TextField
-          label="Color"
-          name="color"
-          type="color"
-          value={form.color}
-          onChange={onChange}
-        />
-        <SelectField
-          label="Status"
-          name="status"
-          value={form.status}
-          onChange={onChange}
-          options={activeStatusOptions()}
-        />
+        <TextField label="Credits" name="credits" type="number" value={form.credits} onChange={onChange} />
+        <TextField label="Color" name="color" type="color" value={form.color} onChange={onChange} />
+        <SelectField label="Status" name="status" value={form.status} onChange={onChange} options={activeStatusOptions()} />
       </div>
 
-      <TextAreaField
-        label="Notes"
-        name="notes"
-        value={form.notes}
-        onChange={onChange}
-        placeholder="Course notes"
-      />
+      <TextAreaField label="Notes" name="notes" value={form.notes} onChange={onChange} placeholder="Course notes" />
     </ModalShell>
   );
 }
 
 function ProjectEditModal({ form, saving, onChange, onCancel, onSubmit }) {
   return (
-    <ModalShell
-      title="Edit Project"
-      subtitle="This matches the Projects page modal."
-      saving={saving}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <TextField
-        label="Project Name"
-        name="name"
-        value={form.name}
-        onChange={onChange}
-        placeholder="Client Website"
-        required
-      />
-      <TextField
-        label="Client"
-        name="client"
-        value={form.client}
-        onChange={onChange}
-        placeholder="Client or team name"
-      />
+    <ModalShell title="Edit Project" subtitle="This matches the Projects page modal." saving={saving} onCancel={onCancel} onSubmit={onSubmit}>
+      <TextField label="Project Name" name="name" value={form.name} onChange={onChange} placeholder="Client Website" required />
+      <TextField label="Client" name="client" value={form.client} onChange={onChange} placeholder="Client or team name" />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <TextField
-          label="Budget"
-          name="budget"
-          type="number"
-          value={form.budget}
-          onChange={onChange}
-        />
-        <TextField
-          label="Color"
-          name="color"
-          type="color"
-          value={form.color}
-          onChange={onChange}
-        />
-        <SelectField
-          label="Status"
-          name="status"
-          value={form.status}
-          onChange={onChange}
-          options={activeStatusOptions()}
-        />
+        <TextField label="Budget" name="budget" type="number" value={form.budget} onChange={onChange} />
+        <TextField label="Color" name="color" type="color" value={form.color} onChange={onChange} />
+        <SelectField label="Status" name="status" value={form.status} onChange={onChange} options={activeStatusOptions()} />
       </div>
 
-      <TextAreaField
-        label="Description"
-        name="description"
-        value={form.description}
-        onChange={onChange}
-        placeholder="Project description"
-      />
-      <TextAreaField
-        label="Notes"
-        name="notes"
-        value={form.notes}
-        onChange={onChange}
-        placeholder="Project notes"
-      />
+      <TextAreaField label="Description" name="description" value={form.description} onChange={onChange} placeholder="Project description" />
+      <TextAreaField label="Notes" name="notes" value={form.notes} onChange={onChange} placeholder="Project notes" />
     </ModalShell>
   );
 }
 
 function CategoryEditModal({ form, saving, onChange, onCancel, onSubmit }) {
-  const subcategories = Array.isArray(form.subcategories)
-    ? form.subcategories
-    : [];
+  const subcategories = Array.isArray(form.subcategories) ? form.subcategories : [];
 
   const addSubcategory = () => {
     const value = String(form.subcategoryInput || "").trim();
     if (!value) return;
-    const exists = subcategories.some(
-      (item) => item.toLowerCase() === value.toLowerCase(),
-    );
+    const exists = subcategories.some((item) => item.toLowerCase() === value.toLowerCase());
     if (exists) return;
     onChange("subcategories", [...subcategories, value]);
     onChange("subcategoryInput", "");
   };
 
   const removeSubcategory = (value) => {
-    onChange(
-      "subcategories",
-      subcategories.filter((item) => item !== value),
-    );
+    onChange("subcategories", subcategories.filter((item) => item !== value));
   };
 
   return (
-    <ModalShell
-      title="Edit Category"
-      subtitle="This matches the Categories page modal."
-      saving={saving}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <TextField
-        label="Category Name"
-        name="name"
-        value={form.name}
-        onChange={onChange}
-        placeholder="Food, Bills, School"
-        required
-      />
+    <ModalShell title="Edit Category" subtitle="This matches the Categories page modal." saving={saving} onCancel={onCancel} onSubmit={onSubmit}>
+      <TextField label="Category Name" name="name" value={form.name} onChange={onChange} placeholder="Food, Bills, School" required />
 
       <div>
-        <label className="mb-2 block text-sm font-medium">
-          Add Subcategory
-        </label>
+        <label className="mb-2 block text-sm font-medium">Add Subcategory</label>
         <div className="flex gap-2">
           <input
             type="text"
@@ -1175,11 +653,7 @@ function CategoryEditModal({ form, saving, onChange, onCancel, onSubmit }) {
             className="input input-bordered w-full rounded-2xl"
             placeholder="Groceries, rent, textbook"
           />
-          <button
-            type="button"
-            className="btn btn-outline rounded-2xl"
-            onClick={addSubcategory}
-          >
+          <button type="button" className="btn btn-outline rounded-2xl" onClick={addSubcategory}>
             Add
           </button>
         </div>
@@ -1188,22 +662,13 @@ function CategoryEditModal({ form, saving, onChange, onCancel, onSubmit }) {
       <div>
         <label className="mb-2 block text-sm font-medium">Subcategories</label>
         {subcategories.length === 0 ? (
-          <p className="rounded-2xl bg-base-200 p-4 text-sm opacity-70">
-            No subcategories added.
-          </p>
+          <p className="rounded-2xl bg-base-200 p-4 text-sm opacity-70">No subcategories added.</p>
         ) : (
           <div className="flex flex-wrap gap-2 rounded-2xl bg-base-200 p-4">
             {subcategories.map((subcategory) => (
-              <span
-                key={subcategory}
-                className="badge badge-lg gap-2 rounded-xl"
-              >
+              <span key={subcategory} className="badge badge-lg gap-2 rounded-xl">
                 {subcategory}
-                <button
-                  type="button"
-                  className="text-error"
-                  onClick={() => removeSubcategory(subcategory)}
-                >
+                <button type="button" className="text-error" onClick={() => removeSubcategory(subcategory)}>
                   ✕
                 </button>
               </span>
@@ -1219,9 +684,7 @@ function RecordTitle({ title, subtitle = "" }) {
   return (
     <div>
       <div className="font-medium">{title || "Untitled"}</div>
-      {subtitle && (
-        <div className="max-w-sm truncate text-sm opacity-60">{subtitle}</div>
-      )}
+      {subtitle && <div className="max-w-sm truncate text-sm opacity-60">{subtitle}</div>}
     </div>
   );
 }

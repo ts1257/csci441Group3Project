@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import TaskManager from "../components/dashboard/TaskManager";
 import FinanceSection from "../components/dashboard/FinanceSection";
-import { fetchTasksWithOfflineFallback } from "../utils/offlineTasks";
-import { fetchRecordsWithOfflineFallback } from "../utils/offlineFinance";
 
 function Dashboard() {
   return (
@@ -19,13 +17,7 @@ function Dashboard() {
       adminTitle="Admin Dashboard"
       adminSubtitle="Monitor users, tasks, and system records across the planner."
     >
-      {({
-        selectedPersona,
-        selectedPersonaName,
-        isAdmin,
-        isFinance,
-        displayPersonaName,
-      }) =>
+      {({ selectedPersona, selectedPersonaName, isAdmin, isFinance, displayPersonaName }) =>
         isAdmin ? (
           <AdminDashboardContent />
         ) : isFinance ? (
@@ -53,14 +45,11 @@ function AdminDashboardContent() {
         setLoading(true);
         setError("");
         const token = localStorage.getItem("token");
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/admin/stats`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/stats`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
-        );
+        });
         const data = await response.json();
 
         if (!response.ok) {
@@ -105,23 +94,15 @@ function AdminDashboardContent() {
 
       <section className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
         <div className="mb-5">
-          <h2 className="text-2xl font-bold md:text-3xl">
-            System Activity Counts
-          </h2>
+          <h2 className="text-2xl font-bold md:text-3xl">System Activity Counts</h2>
           <p className="mt-1 text-sm opacity-70">
-            Monitor the total records stored across users, personas, tasks,
-            trips, habits, and finance modules.
+            Monitor the total records stored across users, personas, tasks, trips, habits, and finance modules.
           </p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {activityCounts.map((item) => (
-            <StatRow
-              key={item.label}
-              label={item.label}
-              value={item.value}
-              loading={loading}
-            />
+            <StatRow key={item.label} label={item.label} value={item.value} loading={loading} />
           ))}
         </div>
       </section>
@@ -172,27 +153,56 @@ function StandardDashboardContent({
       try {
         setLoadingStats(true);
         const token = localStorage.getItem("token");
-        const { tasks: taskList } = await fetchTasksWithOfflineFallback({
-          apiUrl: import.meta.env.VITE_API_URL,
-          token,
-        });
+
+        const requests = [
+          fetch(`${import.meta.env.VITE_API_URL}/api/tasks`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ];
+
+        if (isWellness) {
+          requests.push(
+            fetch(`${import.meta.env.VITE_API_URL}/api/habits`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          );
+        }
+
+        if (isTravel) {
+          requests.push(
+            fetch(`${import.meta.env.VITE_API_URL}/api/trips`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          );
+        }
+
+        const responses = await Promise.all(requests);
+        const taskData = await responses[0].json();
+
+        if (!responses[0].ok) {
+          throw new Error(taskData.message || "Failed to fetch tasks");
+        }
+
+        const taskList = Array.isArray(taskData)
+          ? taskData
+          : Array.isArray(taskData.tasks)
+            ? taskData.tasks
+            : Array.isArray(taskData.data)
+              ? taskData.data
+              : [];
 
         setTasks(taskList.filter((task) => task.persona === normalizedPersona));
 
-        if (isWellness && navigator.onLine) {
-          const habitData = await fetchOptionalList("/api/habits", "habits", token);
-          setHabits(
-            habitData,
-          );
+        if (isWellness && responses[1]) {
+          const habitData = await responses[1].json();
+          setHabits(Array.isArray(habitData) ? habitData : habitData.habits || habitData.data || []);
         } else {
           setHabits([]);
         }
 
-        if (isTravel && navigator.onLine) {
-          const tripData = await fetchOptionalList("/api/trips", "trips", token);
-          setTrips(
-            tripData,
-          );
+        if (isTravel && responses[1]) {
+          const tripData = await responses[1].json();
+          setTrips(Array.isArray(tripData) ? tripData : tripData.trips || tripData.data || []);
         } else {
           setTrips([]);
         }
@@ -221,10 +231,7 @@ function StandardDashboardContent({
 
       return [
         { label: "Daily Habits", value: habits.length },
-        {
-          label: "Completed Habits",
-          value: habits.filter((habit) => habit.completedToday).length,
-        },
+        { label: "Completed Habits", value: habits.filter((habit) => habit.completedToday).length },
         { label: "Medicine Reminders", value: medicineReminders },
       ];
     }
@@ -269,22 +276,14 @@ function StandardDashboardContent({
     if (isWellness) {
       return {
         title: "Wellness Progress Analytics",
-        subtitle:
-          "Track daily habit completion and medicine reminder progress.",
+        subtitle: "Track daily habit completion and medicine reminder progress.",
         completionTitle: "Habit Completion",
-        completionValue: getPercentage(
-          habits.filter((habit) => habit.completedToday).length,
-          habits.length,
-        ),
+        completionValue: getPercentage(habits.filter((habit) => habit.completedToday).length, habits.length),
         barData: habits.map((habit) => ({
           label: habit.name,
-          value: Math.min(
-            Number(habit.progress) || 0,
-            Number(habit.goal) || Number(habit.progress) || 0,
-          ),
+          value: Math.min(Number(habit.progress) || 0, Number(habit.goal) || Number(habit.progress) || 0),
           total: Number(habit.goal) || Number(habit.progress) || 1,
-          detail:
-            `${habit.progress || 0}/${habit.goal || 0} ${habit.unit || ""}`.trim(),
+          detail: `${habit.progress || 0}/${habit.goal || 0} ${habit.unit || ""}`.trim(),
         })),
       };
     }
@@ -295,10 +294,7 @@ function StandardDashboardContent({
         title: "Travel Checklist Analytics",
         subtitle: "View checklist progress across upcoming and active trips.",
         completionTitle: "Checklist Completion",
-        completionValue: getPercentage(
-          checklistItems.filter((item) => item.completed).length,
-          checklistItems.length,
-        ),
+        completionValue: getPercentage(checklistItems.filter((item) => item.completed).length, checklistItems.length),
         barData: trips.map((trip) => {
           const items = trip.checklist || [];
           const completed = items.filter((item) => item.completed).length;
@@ -312,33 +308,18 @@ function StandardDashboardContent({
       };
     }
 
-    const completedTasks = tasks.filter(
-      (task) => task.status === "completed",
-    ).length;
+    const completedTasks = tasks.filter((task) => task.status === "completed").length;
     return {
       title: `${displayPersonaName || "Persona"} Productivity Analytics`,
-      subtitle:
-        "View task completion and workload distribution for the active persona.",
+      subtitle: "View task completion and workload distribution for the active persona.",
       completionTitle: "Task Completion",
       completionValue: getPercentage(completedTasks, tasks.length),
       barData: [
         { label: "Completed", value: completedTasks },
-        {
-          label: "Pending",
-          value: tasks.filter((task) => task.status !== "completed").length,
-        },
-        {
-          label: "High Priority",
-          value: tasks.filter((task) => task.priority === "High").length,
-        },
-        {
-          label: "Medium Priority",
-          value: tasks.filter((task) => task.priority === "Medium").length,
-        },
-        {
-          label: "Low Priority",
-          value: tasks.filter((task) => task.priority === "Low").length,
-        },
+        { label: "Pending", value: tasks.filter((task) => task.status !== "completed").length },
+        { label: "High Priority", value: tasks.filter((task) => task.priority === "High").length },
+        { label: "Medium Priority", value: tasks.filter((task) => task.priority === "Medium").length },
+        { label: "Low Priority", value: tasks.filter((task) => task.priority === "Low").length },
       ],
     };
   }, [tasks, habits, trips, isWellness, isTravel, displayPersonaName]);
@@ -347,14 +328,9 @@ function StandardDashboardContent({
     <>
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         {overviewCards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm"
-          >
+          <div key={card.label} className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
             <p className="text-sm opacity-60">{card.label}</p>
-            <h3 className="mt-3 text-4xl font-bold">
-              {loadingStats ? "..." : card.value}
-            </h3>
+            <h3 className="mt-3 text-4xl font-bold">{loadingStats ? "..." : card.value}</h3>
           </div>
         ))}
       </div>
@@ -396,26 +372,18 @@ function WellnessDashboardHabits({ habits, setHabits }) {
   const updateHabit = async (habit, payload) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/habits/${habit._id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/habits/${habit._id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify(payload),
+      });
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message || "Failed to update habit");
+      if (!response.ok) throw new Error(data.message || "Failed to update habit");
       const updatedHabit = data.habit || data.data || data;
-      setHabits((prev) =>
-        prev.map((item) =>
-          item._id === updatedHabit._id ? updatedHabit : item,
-        ),
-      );
+      setHabits((prev) => prev.map((item) => (item._id === updatedHabit._id ? updatedHabit : item)));
     } catch {
       return;
     }
@@ -442,9 +410,7 @@ function WellnessDashboardHabits({ habits, setHabits }) {
 
     await updateHabit(habit, {
       completedToday: true,
-      progress: habit.goal
-        ? String(Number(habit.goal) || habit.goal)
-        : habit.progress || "0",
+      progress: habit.goal ? String(Number(habit.goal) || habit.goal) : habit.progress || "0",
     });
   };
 
@@ -474,8 +440,7 @@ function WellnessDashboardHabits({ habits, setHabits }) {
 
   const formatProgress = (habit) => {
     const unit = habit.unit ? ` ${habit.unit}` : "";
-    if (habit.goal && habit.progress)
-      return `${habit.progress} / ${habit.goal}${unit}`;
+    if (habit.goal && habit.progress) return `${habit.progress} / ${habit.goal}${unit}`;
     if (habit.goal) return `0 / ${habit.goal}${unit}`;
     if (habit.progress) return `${habit.progress}${unit}`;
     return `0${unit}`;
@@ -484,32 +449,20 @@ function WellnessDashboardHabits({ habits, setHabits }) {
   return (
     <section className="mb-6 rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
       <h2 className="text-2xl font-bold md:text-3xl">Daily Habits</h2>
-      <p className="mt-1 text-sm opacity-70">
-        Complete your daily habits here. Add or edit habits from the Habits
-        page.
-      </p>
+      <p className="mt-1 text-sm opacity-70">Complete your daily habits here. Add or edit habits from the Habits page.</p>
 
       {habits.length === 0 ? (
-        <p className="mt-5 opacity-70">
-          No habits found. Add habits from the Habits page.
-        </p>
+        <p className="mt-5 opacity-70">No habits found. Add habits from the Habits page.</p>
       ) : (
         <div className="mt-5 grid gap-3 md:grid-cols-2">
-          {habits.map((habit, index) => (
-            <div
-              key={`${habit._id || habit.name}-${index}`}
-              className="rounded-3xl border border-base-300 p-4"
-            >
+          {habits.map((habit) => (
+            <div key={habit._id} className="rounded-3xl border border-base-300 p-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="font-semibold">{habit.name}</h3>
                   <p className="text-sm opacity-70">{formatProgress(habit)}</p>
-                  <p className="text-sm opacity-70">
-                    Unit: {habit.unit || "Not set"}
-                  </p>
-                  <p className="text-sm opacity-70">
-                    Reminder: {habit.reminderTime || "Not set"}
-                  </p>
+                  <p className="text-sm opacity-70">Unit: {habit.unit || "Not set"}</p>
+                  <p className="text-sm opacity-70">Reminder: {habit.reminderTime || "Not set"}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:justify-end">
                   <button
@@ -550,24 +503,18 @@ function TravelDashboardTasks({ trips, setTrips }) {
       const checklist = (trip.checklist || []).map((item, index) =>
         index === itemIndex ? { ...item, completed: !item.completed } : item,
       );
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/trips/${trip._id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ checklist }),
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/trips/${trip._id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify({ checklist }),
+      });
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message || "Failed to update checklist");
+      if (!response.ok) throw new Error(data.message || "Failed to update checklist");
       const updatedTrip = data.trip || data.data || data;
-      setTrips((prev) =>
-        prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)),
-      );
+      setTrips((prev) => prev.map((item) => (item._id === updatedTrip._id ? updatedTrip : item)));
     } catch {
       return;
     }
@@ -582,9 +529,7 @@ function TravelDashboardTasks({ trips, setTrips }) {
           .filter(({ item }) => {
             if (activeTab === "Completed") return item.completed;
             if (item.completed) return false;
-            return (
-              getTripDateBucket(trip.startDate) === activeTab.toLowerCase()
-            );
+            return getTripDateBucket(trip.startDate) === activeTab.toLowerCase();
           }),
       }))
       .filter((group) => group.items.length > 0);
@@ -595,9 +540,7 @@ function TravelDashboardTasks({ trips, setTrips }) {
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold md:text-3xl">Tasks</h2>
-          <p className="mt-1 text-sm opacity-70">
-            Travel checklist tasks are filtered by each trip start date.
-          </p>
+          <p className="mt-1 text-sm opacity-70">Travel checklist tasks are filtered by each trip start date.</p>
         </div>
       </div>
 
@@ -618,44 +561,26 @@ function TravelDashboardTasks({ trips, setTrips }) {
       </div>
 
       {trips.length === 0 ? (
-        <p className="mt-6 opacity-70">
-          No trips found. Add a trip from the Trips page.
-        </p>
+        <p className="mt-6 opacity-70">No trips found. Add a trip from the Trips page.</p>
       ) : filteredGroups.length === 0 ? (
-        <p className="mt-6 opacity-70">
-          No travel tasks found for {activeTab.toLowerCase()}.
-        </p>
+        <p className="mt-6 opacity-70">No travel tasks found for {activeTab.toLowerCase()}.</p>
       ) : (
         <div className="space-y-4">
-          {filteredGroups.map(({ trip, items }, groupIndex) => (
-            <div
-              key={`${trip._id || trip.tripName}-${groupIndex}`}
-              className="rounded-3xl border border-base-300 p-5"
-            >
+          {filteredGroups.map(({ trip, items }) => (
+            <div key={trip._id} className="rounded-3xl border border-base-300 p-5">
               <h3 className="text-lg font-semibold">{trip.tripName}</h3>
-              <p className="text-sm opacity-70">
-                {trip.destination} • Start: {formatDate(trip.startDate)}
-              </p>
+              <p className="text-sm opacity-70">{trip.destination} • Start: {formatDate(trip.startDate)}</p>
 
               <div className="mt-4 space-y-2">
                 {items.map(({ item, index }) => (
-                  <label
-                    key={`${trip._id}-${item._id || index}`}
-                    className="flex cursor-pointer items-center gap-3 rounded-2xl bg-base-200 px-4 py-3"
-                  >
+                  <label key={`${trip._id}-${item._id || index}`} className="flex cursor-pointer items-center gap-3 rounded-2xl bg-base-200 px-4 py-3">
                     <input
                       type="checkbox"
                       className="checkbox checkbox-primary"
                       checked={item.completed}
                       onChange={() => toggleChecklistItem(trip, index)}
                     />
-                    <span
-                      className={
-                        item.completed ? "line-through opacity-60" : ""
-                      }
-                    >
-                      {item.text}
-                    </span>
+                    <span className={item.completed ? "line-through opacity-60" : ""}>{item.text}</span>
                   </label>
                 ))}
               </div>
@@ -674,19 +599,26 @@ function FinanceDashboardContent() {
   const loadFinanceData = async () => {
     try {
       const token = localStorage.getItem("token");
-      const { records: recordList } = await fetchRecordsWithOfflineFallback({
-        apiUrl: import.meta.env.VITE_API_URL,
-        token,
-      });
-      setRecords(recordList);
 
-      if (navigator.onLine) {
-        const payments = await fetchOptionalList(
-          "/api/planned-payments",
-          "plannedPayments",
-          token,
-        );
-        setPlannedPayments(payments);
+      const [recordsRes, paymentsRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL}/api/records`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/planned-payments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (recordsRes.ok) {
+        const data = await recordsRes.json();
+        const list = Array.isArray(data) ? data : data.records || data.data || [];
+        setRecords(list);
+      }
+
+      if (paymentsRes.ok) {
+        const data = await paymentsRes.json();
+        const list = Array.isArray(data) ? data : data.plannedPayments || data.data || [];
+        setPlannedPayments(list);
       }
     } catch {
       return;
@@ -728,67 +660,38 @@ function FinanceDashboardContent() {
       balance: income - expense,
       pendingTotal,
       overdueTotal,
-      paidPayments: plannedPayments.filter(
-        (payment) => payment.status === "paid",
-      ).length,
-      pendingPayments: plannedPayments.filter(
-        (payment) => payment.status !== "paid",
-      ).length,
+      paidPayments: plannedPayments.filter((payment) => payment.status === "paid").length,
+      pendingPayments: plannedPayments.filter((payment) => payment.status !== "paid").length,
     };
   }, [records, plannedPayments]);
 
   const financeChartData = useMemo(() => {
     return [
-      {
-        label: "Income",
-        value: financeStats.income,
-        detail: `$${financeStats.income.toFixed(2)}`,
-      },
-      {
-        label: "Expenses",
-        value: financeStats.expense,
-        detail: `$${financeStats.expense.toFixed(2)}`,
-      },
-      {
-        label: "Pending",
-        value: financeStats.pendingTotal,
-        detail: `$${financeStats.pendingTotal.toFixed(2)}`,
-      },
-      {
-        label: "Overdue",
-        value: financeStats.overdueTotal,
-        detail: `$${financeStats.overdueTotal.toFixed(2)}`,
-      },
+      { label: "Income", value: financeStats.income, detail: `$${financeStats.income.toFixed(2)}` },
+      { label: "Expenses", value: financeStats.expense, detail: `$${financeStats.expense.toFixed(2)}` },
+      { label: "Pending", value: financeStats.pendingTotal, detail: `$${financeStats.pendingTotal.toFixed(2)}` },
+      { label: "Overdue", value: financeStats.overdueTotal, detail: `$${financeStats.overdueTotal.toFixed(2)}` },
     ];
   }, [financeStats]);
 
-  const paymentCompletion = getPercentage(
-    financeStats.paidPayments,
-    plannedPayments.length,
-  );
+  const paymentCompletion = getPercentage(financeStats.paidPayments, plannedPayments.length);
 
   return (
     <>
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
           <p className="text-sm opacity-60">Balance</p>
-          <h3 className="mt-3 text-4xl font-bold">
-            ${financeStats.balance.toFixed(2)}
-          </h3>
+          <h3 className="mt-3 text-4xl font-bold">${financeStats.balance.toFixed(2)}</h3>
         </div>
 
         <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
           <p className="text-sm opacity-60">Pending Total</p>
-          <h3 className="mt-3 text-4xl font-bold">
-            ${financeStats.pendingTotal.toFixed(2)}
-          </h3>
+          <h3 className="mt-3 text-4xl font-bold">${financeStats.pendingTotal.toFixed(2)}</h3>
         </div>
 
         <div className="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm">
           <p className="text-sm opacity-60">Overdue</p>
-          <h3 className="mt-3 text-4xl font-bold">
-            ${financeStats.overdueTotal.toFixed(2)}
-          </h3>
+          <h3 className="mt-3 text-4xl font-bold">${financeStats.overdueTotal.toFixed(2)}</h3>
         </div>
       </div>
 
@@ -810,23 +713,12 @@ function FinanceDashboardContent() {
   );
 }
 
-function AnalyticsSection({
-  title,
-  subtitle,
-  completionTitle,
-  completionValue,
-  barData,
-  loading = false,
-}) {
+function AnalyticsSection({ title, subtitle, completionTitle, completionValue, barData, loading = false }) {
   return (
     <section className="mb-6 rounded-4xl border border-base-300 bg-base-100 p-5 shadow-sm md:p-6">
       <SectionHeader title={title} subtitle={subtitle} />
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-        <ProgressRing
-          title={completionTitle}
-          value={completionValue}
-          loading={loading}
-        />
+        <ProgressRing title={completionTitle} value={completionValue} loading={loading} />
         <SimpleBarChart data={barData} loading={loading} />
       </div>
     </section>
@@ -843,9 +735,7 @@ function SectionHeader({ title, subtitle }) {
 }
 
 function ProgressRing({ title, value, loading }) {
-  const safeValue = Number.isFinite(value)
-    ? Math.max(0, Math.min(value, 100))
-    : 0;
+  const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(value, 100)) : 0;
 
   return (
     <div className="flex flex-col items-center justify-center rounded-3xl bg-base-200 p-6 text-center">
@@ -856,9 +746,7 @@ function ProgressRing({ title, value, loading }) {
         }}
       >
         <div className="grid h-28 w-28 place-items-center rounded-full bg-base-100">
-          <span className="text-3xl font-bold">
-            {loading ? "..." : `${safeValue}%`}
-          </span>
+          <span className="text-3xl font-bold">{loading ? "..." : `${safeValue}%`}</span>
         </div>
       </div>
       <p className="mt-4 font-semibold">{title}</p>
@@ -869,10 +757,7 @@ function ProgressRing({ title, value, loading }) {
 
 function SimpleBarChart({ data, loading }) {
   const cleanedData = Array.isArray(data) ? data : [];
-  const maxValue = Math.max(
-    ...cleanedData.map((item) => Number(item.total || item.value) || 0),
-    1,
-  );
+  const maxValue = Math.max(...cleanedData.map((item) => Number(item.total || item.value) || 0), 1);
 
   if (!loading && cleanedData.length === 0) {
     return (
@@ -891,8 +776,7 @@ function SimpleBarChart({ data, loading }) {
           cleanedData.map((item) => {
             const value = Number(item.value) || 0;
             const itemTotal = Number(item.total) || maxValue;
-            const width =
-              itemTotal > 0 ? Math.min((value / itemTotal) * 100, 100) : 0;
+            const width = itemTotal > 0 ? Math.min((value / itemTotal) * 100, 100) : 0;
 
             return (
               <div key={item.label}>
@@ -901,10 +785,7 @@ function SimpleBarChart({ data, loading }) {
                   <span className="opacity-70">{item.detail || value}</span>
                 </div>
                 <div className="h-4 overflow-hidden rounded-full bg-base-300">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${width}%` }}
-                  />
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
                 </div>
               </div>
             );
@@ -924,9 +805,7 @@ function getChecklistStats(trips, today) {
   const result = { today: 0, upcoming: 0, overdue: 0 };
 
   trips.forEach((trip) => {
-    const pendingItems = (trip.checklist || []).filter(
-      (item) => !item.completed,
-    ).length;
+    const pendingItems = (trip.checklist || []).filter((item) => !item.completed).length;
     if (pendingItems === 0) return;
     const bucket = getTripDateBucket(trip.startDate, today);
     result[bucket] += pendingItems;
@@ -951,9 +830,7 @@ function getTripDateBucket(startDate, todayValue = null) {
 
 function parseLocalDate(dateString) {
   if (!dateString) return null;
-  const datePart = dateString.includes("T")
-    ? dateString.split("T")[0]
-    : dateString;
+  const datePart = dateString.includes("T") ? dateString.split("T")[0] : dateString;
   const [year, month, day] = datePart.split("-").map(Number);
   return new Date(year, month - 1, day);
 }
@@ -961,23 +838,6 @@ function parseLocalDate(dateString) {
 function formatDate(dateValue) {
   if (!dateValue) return "Not set";
   return parseLocalDate(dateValue).toLocaleDateString();
-}
-
-async function fetchOptionalList(path, listKey, token) {
-  try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = await response.json();
-
-    if (!response.ok) return [];
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data[listKey])) return data[listKey];
-    if (Array.isArray(data.data)) return data.data;
-    return [];
-  } catch {
-    return [];
-  }
 }
 
 export default Dashboard;

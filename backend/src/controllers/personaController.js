@@ -3,8 +3,7 @@ import User from "../models/User.js";
 
 const ADMIN_PERSONA = {
   name: "Admin",
-  description:
-    "Admin mode for managing users, system records, and application data",
+  description: "Admin mode for managing users, system records, and application data",
   color: "#111827",
 };
 
@@ -31,8 +30,7 @@ const DEFAULT_PERSONAS = [
   },
   {
     name: "Travel",
-    description:
-      "Travel mode for organizing trips, transit tasks, and travel plans",
+    description: "Travel mode for organizing trips, transit tasks, and travel plans",
     color: "#8b5cf6",
   },
 ];
@@ -40,9 +38,7 @@ const DEFAULT_PERSONAS = [
 async function ensureDefaultPersonas(userId) {
   const user = await User.findById(userId).select("role personas");
   const isAdmin = user?.role === "admin";
-  const expectedPersonas = isAdmin
-    ? [ADMIN_PERSONA, ...DEFAULT_PERSONAS]
-    : DEFAULT_PERSONAS;
+  const expectedPersonas = isAdmin ? [ADMIN_PERSONA, ...DEFAULT_PERSONAS] : DEFAULT_PERSONAS;
 
   if (!isAdmin) {
     await Persona.deleteMany({ user: userId, name: /^admin$/i });
